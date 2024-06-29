@@ -1,8 +1,10 @@
-# latent-clay
+# Latent Clay
 
 A local-first virtual world sandbox composing AI capabilities
 
 **This is a work in progress. Contributions welcome!**
+
+https://github.com/ejones/latent-clay/assets/377495/ea637c4e-6fdb-4775-ac5e-cf2a0a869e2e
 
 ## Requirements
 
