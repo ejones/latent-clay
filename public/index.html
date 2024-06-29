@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="main.css">
+  </head>
+  <body>
+    <div id="container"></div>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module">
+      import * as THREE from "three";
+      import Stats from "three/addons/libs/stats.module.js";
+      import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
+      import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+      import { Octree } from "three/addons/math/Octree.js";
+      import { Capsule } from "three/addons/math/Capsule.js";
+
+      const clock = new THREE.Clock();
+
+      const ambientColor = 0xaaaaaa; //  0xeeeeee; //0xfad5a5; ;
+      const fogFar = 22; // 15; // 50;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(ambientColor);
+      scene.fog = new THREE.Fog(ambientColor, 0, fogFar);
+
+      const camera = new THREE.PerspectiveCamera(
+        70,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000,
+      );
+      camera.rotation.order = "YXZ";
+
+      const fillLight1 = new THREE.HemisphereLight(0x8dc1de, 0x00668d, 1.5);
+      fillLight1.position.set(2, 1, 1);
+      scene.add(fillLight1);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
+      directionalLight.position.set(-5, 25, -1);
+      directionalLight.castShadow = true;
+      directionalLight.shadow.camera.near = 0.01;
+      directionalLight.shadow.camera.far = 500;
+      directionalLight.shadow.camera.right = 30;
+      directionalLight.shadow.camera.left = -30;
+      directionalLight.shadow.camera.top = 30;
+      directionalLight.shadow.camera.bottom = -30;
+      directionalLight.shadow.mapSize.width = 1024;
+      directionalLight.shadow.mapSize.height = 1024;
+      directionalLight.shadow.radius = 4;
+      directionalLight.shadow.bias = -0.00006;
+      scene.add(directionalLight);
+
+      const ambLight = new THREE.AmbientLight(ambientColor);
+      scene.add(ambLight);
+
+      const container = document.getElementById("container");
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.VSMShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      container.appendChild(renderer.domElement);
+
+      const stats = new Stats();
+      stats.domElement.style.position = "absolute";
+      stats.domElement.style.top = "0px";
+      container.appendChild(stats.domElement);
+
+      const crosshair = document.createElement("div");
+      Object.assign(crosshair.style, {
+        background: "red",
+        width: "5px",
+        height: "5px",
+        borderRadius: "500px",
+        position: "absolute",
+        left: "calc(50% - 2.5px)",
+        top: "calc(50% - 2.5px)",
+      });
+      container.appendChild(crosshair);
+
+      const prompt = document.createElement("textarea");
+      prompt.id = "prompt";
+      prompt.oninput = () => {
+        prompt.style.height = 0;
+        prompt.style.height = `${prompt.scrollHeight}px`;
+      };
+      prompt.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.target.blur();
+          prompt.classList.remove("prompt-active");
+          fetch("/", { method: "POST", body: e.target.value });
+        }
+      };
+
+      document.addEventListener("pointerlockchange", () => {
+        if (document.pointerLockElement === null && document.activeElement === prompt) {
+          prompt.blur();
+          prompt.classList.remove("prompt-active");
+        }
+      });
+      container.appendChild(prompt);
+
+      const GRAVITY = 30;
+
+      const STEPS_PER_FRAME = 5;
+
+      let worldOctree = new Octree();
+      let levelObj;
+
+      const playerCollider = new Capsule(
+        new THREE.Vector3(0, 0.35, 0),
+        new THREE.Vector3(0, 1, 0),
+        0.35,
+      );
+
+      const playerVelocity = new THREE.Vector3();
+      const playerDirection = new THREE.Vector3();
+
+      let playerOnFloor = false;
+      let mouseTime = 0;
+      let pointerLocking = false;
+      let updatePosition = 0;
+      let selectionMode = "region";
+      const createdObjects = new Map();
+      const aliasedObjects = new Map();
+      const activeTooltips = new Map();
+      const doorIndicators = new Map();
+      const activeMarkers = [];
+
+      const keyStates = {};
+
+      document.addEventListener("keydown", (event) => {
+        if (event.code === "Slash") {
+          if (activeMarkers.length === 1) {
+            let { x, z } = activeMarkers[0];
+            [x, z] = [x, z].map((v) => Math.round(v * 10));
+            let ry = Math.round((camera.rotation.y / Math.PI) * 180) % 360;
+            ry = ry < 0 ? 360 + ry : ry;
+            showPrompt("/create ", ` --x ${x} --z ${z} --ry ${ry}`);
+          } else {
+            showPrompt(
+              "/",
+              activeMarkers.length
+                ? ` --xz '${[...activeMarkers, activeMarkers[0]]
+                    .map(({ x, z }) => `${Math.round(x * 10)},${Math.round(z * 10)}`)
+                    .join(" ")}'`
+                : "",
+            );
+          }
+          event.preventDefault();
+        } else if (event.code === "KeyC") {
+          // TODO - selection clear key
+          clearMarkers();
+        } else if (event.code === "KeyO") {
+          selectionMode = "object";
+        } else if (event.code === "KeyR") {
+          selectionMode = "region";
+        } else if (event.code === "KeyI") {
+          if (doorIndicators.size > 0) {
+            const firstObj = doorIndicators.values()[Symbol.iterator]().next().value;
+            const isAdded = Boolean(firstObj.parent);
+            for (const obj of doorIndicators.values()) {
+              if (isAdded) {
+                scene.remove(obj);
+              } else {
+                scene.add(obj);
+              }
+            }
+          }
+        } else if (document.activeElement?.value === undefined) {
+          keyStates[event.code] = true;
+        }
+      });
+
+      document.addEventListener("keyup", (event) => {
+        if (document.activeElement?.value === undefined) {
+          keyStates[event.code] = false;
+        }
+      });
+
+      container.addEventListener("mousedown", () => {
+        if (document.pointerLockElement === null) pointerLocking = true;
+
+        document.body.requestPointerLock();
+
+        mouseTime = performance.now();
+      });
+
+      document.addEventListener("mouseup", () => {
+        if (document.pointerLockElement !== null && !pointerLocking) handleClick();
+
+        pointerLocking = false;
+      });
+
+      document.body.addEventListener("mousemove", (event) => {
+        if (document.pointerLockElement === document.body) {
+          camera.rotation.y -= event.movementX / 500;
+          camera.rotation.x -= event.movementY / 500;
+        }
+
+        if (activeMarkers.length) {
+          const { point } = getSelectedLocation();
+          const y = activeMarkers.mesh.position.y - 0.01;
+          if (point) {
+            const lastMarker = activeMarkers.at(-1);
+            const firstMarker = activeMarkers[0];
+            const lastVec = new THREE.Vector3(lastMarker.x, y, lastMarker.z);
+            const firstVec = new THREE.Vector3(firstMarker.x, y, firstMarker.z);
+            const firstDir = new THREE.Vector3(point.x, y, point.z).sub(firstVec).normalize();
+            const lastDir = new THREE.Vector3(point.x, y, point.z).sub(lastVec).normalize();
+
+            firstVec.addScaledVector(firstDir, 0.01);
+            lastVec.addScaledVector(lastDir, 0.01);
+
+            if (activeMarkers.guide) {
+              scene.remove(activeMarkers.guide);
+              activeMarkers.guide = null;
+            }
+
+            let found = false;
+            raycaster.set(firstVec, firstDir);
+            found = raycaster.intersectObject(activeMarkers.mesh, false).length > 0;
+            raycaster.set(lastVec, lastDir);
+            found = found || raycaster.intersectObject(activeMarkers.mesh, false).length > 0;
+
+            if (!found) {
+              const guideMat = new THREE.MeshBasicMaterial({
+                color: 0x00ffff,
+                side: THREE.DoubleSide,
+              });
+              guideMat.transparent = true;
+              guideMat.opacity = 0.2;
+
+              activeMarkers.guide = createPolygonHighlight(
+                [firstMarker, point, lastMarker],
+                guideMat,
+              );
+              scene.add(activeMarkers.guide);
+            }
+          }
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+      pointer.x = 0;
+      pointer.y = 0;
+
+      const loadObjModel = async (name, { useVertexColors = false } = {}) => {
+        const slashIdx = name.lastIndexOf("/");
+        const [path, modelName] =
+          slashIdx === -1
+            ? ["", name]
+            : [name.slice(0, slashIdx + 1), name.slice(slashIdx + 1)];
+        return new Promise((resolve) => {
+          const handleObj = (obj) => {
+            if (useVertexColors) {
+              obj.traverse((node) => {
+                if (node.material) {
+                  node.material.emissive = new THREE.Color(0.01, 0.01, 0.01);
+                  node.material.vertexColors = true;
+                }
+              });
+            }
+            resolve(obj);
+          };
+
+          new MTLLoader().setPath(path).load(
+            `${modelName.slice(0, -4)}.mtl`,
+            (materials) => {
+              materials.preload();
+              new OBJLoader().setMaterials(materials).setPath(path).load(modelName, handleObj);
+            },
+            undefined,
+            () => {
+              new OBJLoader().setPath(path).load(modelName, handleObj);
+            },
+          );
+        });
+      };
+
+      const getSelectedLocation = ({ debug = false } = {}) => {
+        raycaster.setFromCamera(pointer, camera);
+
+        const intr = raycaster
+          .intersectObjects(scene.children)
+          .find(
+            (i) =>
+              i.object.isMesh &&
+              i.object !== activeMarkers.mesh &&
+              i.object !== activeMarkers.guide,
+          );
+
+        if (!intr) {
+          return { point: null, object: null };
+        }
+
+        const xzNorm = intr.face.normal.clone();
+        xzNorm.y = 0;
+        xzNorm.clampLength(0, 0.025);
+        const point = intr.point.clone().add(xzNorm);
+
+        return { point, object: intr.object };
+      };
+
+      const clearMarkers = () => {
+        activeMarkers.length = 0;
+        if (activeMarkers.mesh) {
+          scene.remove(activeMarkers.mesh);
+          delete activeMarkers.mesh;
+        }
+        if (activeMarkers.guide) {
+          scene.remove(activeMarkers.guide);
+          delete activeMarkers.guide;
+        }
+      };
+
+      const createMarkerSprite = (x, z) => {
+        const canv = document.createElement("canvas");
+        canv.width = 25;
+        canv.height = 250;
+        const texture = new THREE.CanvasTexture(canv);
+        const material = new THREE.SpriteMaterial({ map: texture });
+
+        const ctx = canv.getContext("2d");
+        ctx.scale(2, 2);
+
+        ctx.fillStyle = ctx.strokeStyle = "rgb(0 170 204)";
+        ctx.lineWidth = 4;
+
+        ctx.beginPath();
+        ctx.arc(8, 119, 4, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.arc(8, 119, 16, -Math.PI, 2 * Math.PI);
+        //ctx.moveTo(6, 119);
+        //ctx.lineTo(6, 0);
+        ctx.stroke();
+
+        const sprite = new THREE.Sprite(material);
+
+        sprite.center.set(0.5, 0);
+        sprite.scale.set(0.05, 0.5, 1);
+        sprite.position.set(x, -1, z);
+        return sprite;
+      };
+
+      const createTooltipSprite = (x, z) => {
+        const canv = document.createElement("canvas");
+        canv.width = 1000;
+        canv.height = 1000;
+        canv.getContext("2d").scale(2, 2);
+        const texture = new THREE.CanvasTexture(canv);
+        const material = new THREE.SpriteMaterial({ map: texture });
+
+        const sprite = new THREE.Sprite(material);
+        sprite.center.set(0.01, 0);
+        sprite.position.set(x, -1, z);
+        sprite.scale.set(2, 2, 1);
+        return [sprite, canv, texture];
+      };
+
+      const createPolygonHighlight = (points, material = null) => {
+        if (points.length === 1) {
+          return createMarkerSprite(points[0].x, points[0].z);
+        }
+        if (!material || typeof material === "number") {
+          material = new THREE.MeshBasicMaterial({
+            color: material || 0x00ffff,
+            side: THREE.DoubleSide,
+          });
+          material.transparent = true;
+          material.opacity = 0.5;
+        }
+
+        const shape = new THREE.Shape();
+
+        shape.moveTo(points[0].x, points[0].z);
+
+        for (let i = 1; i < points.length; i++) {
+          shape.lineTo(points[i].x, points[i].z);
+        }
+
+        const height = Math.max(...points.map(({ y }) => y + 1.05)); // REVIEW
+
+        const geometry = new THREE.ExtrudeGeometry(shape, {
+          steps: 1,
+          depth: height,
+          bevelEnabled: false,
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.y = height - 0.999;
+        mesh.rotation.x = Math.PI / 2;
+
+        return mesh;
+      };
+
+      const formatWithTiming = (msg, startTime, multiline) => {
+        const elapsedMs = Date.now() - startTime;
+        const elapsedMin = Math.floor(elapsedMs / 60_000);
+        const elapsedSec = Math.round((elapsedMs % 60_000) / 1000);
+        const elapsedStr = `${elapsedMin ? `${elapsedMin}m` : ""}${elapsedSec}s${
+          multiline ? "\n" : " \xb7 "
+        }`;
+        return `${elapsedStr}${msg}`;
+      };
+
+      const drawTooltip = ({ canvas, msg, img, texture, startTime }) => {
+        const fullMsg = formatWithTiming(msg, startTime);
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, 500, 500);
+
+        ctx.strokeStyle = "rgb(0 170 204)";
+        //ctx.fillStyle = 'rgb(0 170 204 / 0.4)';
+        ctx.fillStyle = "rgb(20 45 50  / 0.8)";
+        ctx.lineWidth = 4;
+
+        ctx.beginPath();
+        ctx.moveTo(30, 348);
+        ctx.lineTo(38, 302);
+        ctx.lineTo(498, 302);
+        ctx.lineTo(490, 348);
+        ctx.fill();
+        //ctx.stroke();
+
+        ctx.beginPath();
+        ctx.fillStyle = "rgb(0 255 255)";
+        ctx.font = "28px monospace";
+        ctx.letterSpacing = "-0.5px";
+        ctx.fillText(fullMsg, 44, 338);
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.arc(6, 494, 4, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.moveTo(6, 494);
+        ctx.lineTo(30, 348);
+        ctx.lineTo(490, 348);
+        ctx.stroke();
+
+        if (img) {
+          // TODO assumes square
+          ctx.drawImage(img, 144, 40, 260, 260);
+        }
+
+        texture.needsUpdate = true;
+      };
+
+      const showPrompt = (preCmd, postCmd) => {
+        prompt.value = `${preCmd}${postCmd}`;
+        console.log(prompt.value);
+        prompt.selectionStart = prompt.selectionEnd = preCmd.length;
+        prompt.focus();
+        prompt.classList.add("prompt-active");
+        prompt.style.height = 0;
+        prompt.style.height = `${prompt.scrollHeight}px`;
+      };
+
+      const wallTexture = new THREE.TextureLoader().load("models/obj/level.png");
+      wallTexture.wrapS = THREE.RepeatWrapping;
+      wallTexture.wrapT = THREE.RepeatWrapping;
+
+      const createWallMessage = (aspectRatio) => {
+        const canv = document.createElement("canvas");
+        canv.height = 200;
+        canv.width = 200 * aspectRatio;
+
+        const tex = new THREE.CanvasTexture(canv);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+
+        return [canv, tex];
+      };
+
+      const drawWallMessage = ({ canvas, msg, texture, startTime }) => {
+        const fullMsg = formatWithTiming(msg, startTime, true);
+        const ctx = canvas.getContext("2d");
+        for (let x = 0; x < canvas.width; x += 200) {
+          ctx.drawImage(wallTexture.image, x, 0, 200, 200);
+        }
+        ctx.fillStyle = "rgb(0 255 255)";
+        ctx.font = "20px monospace";
+        ctx.letterSpacing = "-0.5px";
+        for (let x = 0; x < canvas.width; x += 600) {
+          ctx.fillText(fullMsg, 20 + x, 25);
+        }
+
+        texture.needsUpdate = true;
+      };
+
+      const handleClick = () => {
+        const { point } = getSelectedLocation({ debug: true });
+        if (!point) {
+          return;
+        }
+        activeMarkers.push(point);
+        if (activeMarkers.mesh) {
+          scene.remove(activeMarkers.mesh);
+        }
+        activeMarkers.mesh = createPolygonHighlight(activeMarkers);
+        scene.add(activeMarkers.mesh);
+      };
+
+      const playerCollisions = () => {
+        const result = worldOctree.capsuleIntersect(playerCollider);
+
+        playerOnFloor = false;
+
+        if (result) {
+          playerOnFloor = result.normal.y > 0;
+
+          if (!playerOnFloor) {
+            playerVelocity.addScaledVector(result.normal, -result.normal.dot(playerVelocity));
+          }
+
+          playerCollider.translate(result.normal.multiplyScalar(result.depth));
+        }
+      };
+
+      const updatePlayer = (deltaTime) => {
+        let damping = Math.exp(-4 * deltaTime) - 1;
+
+        if (!playerOnFloor) {
+          playerVelocity.y -= GRAVITY * deltaTime;
+
+          // small air resistance
+          damping *= 0.1;
+        }
+
+        playerVelocity.addScaledVector(playerVelocity, damping);
+
+        const deltaPosition = playerVelocity.clone().multiplyScalar(deltaTime);
+        playerCollider.translate(deltaPosition);
+
+        playerCollisions();
+
+        camera.position.copy(playerCollider.end);
+      };
+
+      const getForwardVector = () => {
+        camera.getWorldDirection(playerDirection);
+        playerDirection.y = 0;
+        playerDirection.normalize();
+
+        return playerDirection;
+      };
+
+      const getSideVector = () => {
+        camera.getWorldDirection(playerDirection);
+        playerDirection.y = 0;
+        playerDirection.normalize();
+        playerDirection.cross(camera.up);
+
+        return playerDirection;
+      };
+
+      const controls = (deltaTime) => {
+        // gives a bit of air control
+        const speedDelta = deltaTime * (playerOnFloor ? 25 : 8);
+
+        if (keyStates["KeyW"]) {
+          playerVelocity.add(getForwardVector().multiplyScalar(speedDelta));
+        }
+
+        if (keyStates["KeyS"]) {
+          playerVelocity.add(getForwardVector().multiplyScalar(-speedDelta));
+        }
+
+        if (keyStates["KeyA"]) {
+          playerVelocity.add(getSideVector().multiplyScalar(-speedDelta));
+        }
+
+        if (keyStates["KeyD"]) {
+          playerVelocity.add(getSideVector().multiplyScalar(speedDelta));
+        }
+
+        if (playerOnFloor) {
+          if (keyStates["Space"]) {
+            playerVelocity.y = 15;
+          }
+        }
+      };
+
+      const buildOctree = () => {
+        worldOctree = new Octree();
+        console.log("create octree");
+        worldOctree.fromGraphNode(levelObj);
+        for (const obj of createdObjects.values()) {
+          worldOctree.fromGraphNode(obj);
+        }
+        console.log("done create octree");
+      };
+
+      (async () => {
+        levelObj = await loadObjModel("models/obj/level.obj");
+
+        levelObj.traverse((node) => {
+          if (node.material) {
+            node.material.transparent = true;
+            node.material.opacity = 0.33;
+          }
+        });
+
+        Object.assign(levelObj.position, { x: -60, y: -2, z: -60 });
+        scene.add(levelObj);
+
+        buildOctree();
+        animate();
+      })();
+
+      const teleportPlayerIfOob = () => {
+        if (camera.position.y <= -25) {
+          playerCollider.start.set(0, 0.35, 0);
+          playerCollider.end.set(0, 1, 0);
+          playerCollider.radius = 0.35;
+          camera.position.copy(playerCollider.end);
+          camera.rotation.set(0, 0, 0);
+        }
+      };
+
+      const animate = () => {
+        const deltaTime = Math.min(0.05, clock.getDelta()) / STEPS_PER_FRAME;
+
+        // we look for collisions in substeps to mitigate the risk of
+        // an object traversing another too quickly for detection.
+
+        for (let i = 0; i < STEPS_PER_FRAME; i++) {
+          controls(deltaTime);
+
+          updatePlayer(deltaTime);
+
+          teleportPlayerIfOob();
+        }
+
+        renderer.render(scene, camera);
+
+        stats.update();
+
+        requestAnimationFrame(animate);
+      };
+
+      const handleUpdates = async (updates) => {
+        if (!updates.length) {
+          return;
+        }
+
+        updatePosition += updates.length;
+
+        const initialObjCount = createdObjects.size;
+
+        for (const [id, cmd, type, data] of updates) {
+          console.log(id, cmd, type, data);
+          if (cmd === "del") {
+            // REVIEW
+            if (createdObjects.has(id)) {
+              scene.remove(createdObjects.get(id));
+            }
+            activeTooltips.delete(id);
+            doorIndicators.delete(id);
+            continue;
+          }
+          let newObj, newTooltip;
+          let isTooltip = false;
+          let isRoomSurface =
+            type === "wall" || type === "door" || type === "ceil" || type === "floor";
+          if (type === "msg") {
+            let img = null;
+            if (data.img) {
+              img = new Image();
+              await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = data.img;
+              });
+            }
+            if (activeTooltips.has(id)) {
+              newTooltip = {
+                ...activeTooltips.get(id),
+                msg: data.msg,
+                img,
+              };
+            } else {
+              let canvas, texture;
+              [newObj, canvas, texture] = createTooltipSprite(data.x / 10, data.z / 10);
+              newTooltip = {
+                type: "tooltip",
+                startTime: Date.now(),
+                canvas,
+                texture,
+                msg: data.msg,
+                img,
+              };
+            }
+          } else if (type === "obj" || isRoomSurface) {
+            newObj = await loadObjModel(data.obj, { useVertexColors: type === "obj" });
+            newObj.position.set(data.x / 10, isRoomSurface ? -0.999 : -0.6, data.z / 10);
+            newObj.rotation.set(0, 0, 0);
+            if (type === "obj" && data.scale) {
+              newObj.scale.set(data.scale, data.scale, data.scale);
+            }
+            if (type === "door") {
+              const xzs = data.path.map(([x, z]) => [x / 10, z / 10]);
+              const start = xzs[0];
+              const end = xzs.at(-2);
+              const doorVec = new THREE.Vector2(...end).sub(new THREE.Vector2(...start));
+              const doorNorm = new THREE.Vector2(doorVec.y, -doorVec.x)
+                .normalize()
+                .multiplyScalar(0.6);
+              const xzPath = [
+                new THREE.Vector2(...start).add(doorNorm),
+                new THREE.Vector2(...end).add(doorNorm),
+                new THREE.Vector2(...end).addScaledVector(doorNorm, -1),
+                new THREE.Vector2(...start).addScaledVector(doorNorm, -1),
+              ];
+              const indicator = createPolygonHighlight(
+                xzPath.map(({ x, y: z }) => ({ x, y: -0.99, z })),
+                0xdd2222,
+              );
+              doorIndicators.set(id, indicator);
+            }
+            if (isRoomSurface) {
+              if (data.msg) {
+                if (activeTooltips.has(id)) {
+                  newTooltip = {
+                    ...activeTooltips.get(id),
+                    msg: data.msg,
+                  };
+                } else {
+                  let [canvas, texture] = createWallMessage(12);
+                  newTooltip = {
+                    type: "wall",
+                    startTime: Date.now(),
+                    canvas,
+                    texture,
+                    msg: data.msg,
+                  };
+                }
+                newObj.traverse((node) => {
+                  if (node.material) {
+                    node.material.map = newTooltip.texture;
+                  }
+                });
+              } else {
+                newObj.traverse((node) => {
+                  if (node.material && !node.material.map) {
+                    node.material.map = wallTexture;
+                  }
+                });
+              }
+            }
+            if (data.ry) {
+              newObj.rotateY((data.ry * Math.PI) / 180);
+            }
+          } else if (type === "alias") {
+            aliasedObjects.set(id, data);
+          }
+          if (newObj) {
+            if (createdObjects.has(id)) {
+              scene.remove(createdObjects.get(id));
+            }
+            createdObjects.set(id, newObj);
+            scene.add(newObj);
+          }
+          if (newTooltip) {
+            activeTooltips.set(id, newTooltip);
+            if (newTooltip.type === "tooltip") {
+              drawTooltip(newTooltip);
+            } else {
+              drawWallMessage(newTooltip);
+            }
+          } else {
+            activeTooltips.delete(id);
+          }
+        }
+
+        // REVIEW - handle aliases
+        for (const [id, data] of aliasedObjects) {
+          if (createdObjects.has(data.id)) {
+            const newObj = createdObjects.get(data.id).clone();
+            newObj.position.x = data.x / 10;
+            newObj.position.z = data.z / 10;
+
+            newObj.rotation.set(0, 0, 0);
+            newObj.rotateY((data.ry * Math.PI) / 180);
+
+            // TODO avoid duplication with first run
+            if (createdObjects.has(id)) {
+              scene.remove(createdObjects.get(id));
+            }
+            createdObjects.set(id, newObj);
+            scene.add(newObj);
+          }
+        }
+
+        for (const [id, tooltip] of activeTooltips) {
+          if (tooltip.type === "tooltip") {
+            drawTooltip(tooltip);
+          } else {
+            drawWallMessage(tooltip);
+          }
+        }
+
+        // FIXME
+        if (
+          createdObjects.size !== initialObjCount ||
+          updates.some((up) => up[2] === "door" && !up[3].msg)
+        ) {
+          buildOctree();
+        }
+      };
+
+      const scheduleUpdate = () =>
+        setTimeout(() => {
+          if (document.hidden) {
+            scheduleUpdate();
+          } else {
+            fetch(`/world?after=${encodeURIComponent(updatePosition)}`)
+              .then((r) => r.json())
+              .then(async (updates) => {
+                await handleUpdates(updates);
+                scheduleUpdate();
+              });
+          }
+        }, 1000);
+      scheduleUpdate();
+    </script>
+  </body>
+</html>

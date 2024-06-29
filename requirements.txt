@@ -1,0 +1,22 @@
+accelerate==0.27.2
+diffusers==0.26.3
+numpy==1.26.3
+open3d==0.18.0
+Pillow==10.2.0
+torch==2.1.2
+transformers==4.38.1
+PyYAML==6.0.1
+opencv-python==4.9.0.80
+scikit-image==0.22.0
+tripy==1.0.0
+
+# TripoSR specific
+omegaconf==2.3.0
+einops==0.7.0
+git+https://github.com/tatsy/torchmcubes.git
+trimesh==4.0.5
+rembg
+huggingface-hub
+imageio[ffmpeg]
+xatlas==0.0.9
+moderngl==5.10.0

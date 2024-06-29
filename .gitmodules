@@ -1,0 +1,3 @@
+[submodule "vendor/TripoSR"]
+	path = vendor/TripoSR
+	url = https://github.com/VAST-AI-Research/TripoSR.git

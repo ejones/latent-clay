@@ -1,0 +1,22 @@
+worldlog: worldlog.jsonl
+capabilities:
+  txt2img:
+    target: latentclay.providers.ProcessRunner
+    params:
+      cmd: venv/bin/python scripts/txt2object_img.py {desc} {output}{device_arg}
+      progress_re: ^\s*(\d+%\s*\|.*\|\s*\d+/\d+)
+  img2mesh:
+    target: latentclay.providers.ProcessRunner
+    params:
+      cmd: scripts/img2mesh.sh {img} {output}
+      progress_re: INFO -\s+(.*)
+  txt2wall_floor:
+    target: latentclay.providers.ProcessRunner
+    params:
+      cmd: venv/bin/python scripts/txt2wall_floor.py {desc} {output_wall} {output_floor} {output_ceil} {wall_ar}{device_arg}
+      progress_re: ^\s*(\d+%\s*\|.*\|\s*\d+/\d+)
+  img2door:
+    target: latentclay.providers.ProcessRunner
+    params:
+      cmd: venv/bin/python scripts/img2door.py {desc} {img} {x} {width} {height} {output_img} {output_uvs}{device_arg}
+      progress_re: ^\s*(\d+%\s*\|.*\|\s*\d+/\d+)

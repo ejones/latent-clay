@@ -1,0 +1,6 @@
+/worldlog.jsonl
+/worldlog.jsonl.*
+/public/output
+.DS_Store
+*.sw[op]
+/temp
