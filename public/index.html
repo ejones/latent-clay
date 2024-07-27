@@ -655,8 +655,19 @@
         requestAnimationFrame(animate);
       };
 
+      const redrawTooltips = () => {
+        for (const [id, tooltip] of activeTooltips) {
+          if (tooltip.type === "tooltip") {
+            drawTooltip(tooltip);
+          } else {
+            drawWallMessage(tooltip);
+          }
+        }
+      };
+
       const handleUpdates = async (updates) => {
         if (!updates.length) {
+          redrawTooltips();
           return;
         }
 
@@ -808,13 +819,7 @@
           }
         }
 
-        for (const [id, tooltip] of activeTooltips) {
-          if (tooltip.type === "tooltip") {
-            drawTooltip(tooltip);
-          } else {
-            drawWallMessage(tooltip);
-          }
-        }
+        redrawTooltips();
 
         // FIXME
         if (
