@@ -21,8 +21,6 @@
       import Stats from "three/addons/libs/stats.module.js";
       import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
       import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
-      import { Octree } from "three/addons/math/Octree.js";
-      import { Capsule } from "three/addons/math/Capsule.js";
 
       let physicsWorld, transformAux1;
       const rigidBodies = [];
@@ -32,6 +30,7 @@
         Ammo = AmmoLib;
         setupPhysicsWorld();
         setupPlayerPhysics();
+        loadLevel();
       });
 
       const setupPhysicsWorld = () => {
@@ -40,11 +39,16 @@
         const broadphase = new Ammo.btDbvtBroadphase();
         const solver = new Ammo.btSequentialImpulseConstraintSolver();
 
-        physicsWorld = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
+        physicsWorld = new Ammo.btDiscreteDynamicsWorld(
+          dispatcher,
+          broadphase,
+          solver,
+          collisionConfiguration,
+        );
         physicsWorld.setGravity(new Ammo.btVector3(0, -9.8, 0));
 
         transformAux1 = new Ammo.btTransform();
-      }
+      };
 
       const createRigidBody = (threeObject, physicsShape, mass, pos, quat) => {
         const transform = new Ammo.btTransform();
@@ -56,7 +60,12 @@
         const localInertia = new Ammo.btVector3(0, 0, 0);
         physicsShape.calculateLocalInertia(mass, localInertia);
 
-        const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, physicsShape, localInertia);
+        const rbInfo = new Ammo.btRigidBodyConstructionInfo(
+          mass,
+          motionState,
+          physicsShape,
+          localInertia,
+        );
         const body = new Ammo.btRigidBody(rbInfo);
 
         threeObject.userData.physicsBody = body;
@@ -67,7 +76,99 @@
         }
 
         physicsWorld.addRigidBody(body);
-      }
+        return body;
+      };
+
+      const getMeshData = (mesh) => {
+        const index = mesh.geometry.index !== null ? mesh.geometry.index : undefined;
+        const attributes = mesh.geometry.attributes;
+        const scale = mesh.scale;
+
+        if (attributes.position === undefined) {
+          console.error("getMeshData(): Position attribute required for conversion.");
+          return;
+        }
+
+        const position = attributes.position;
+
+        let vertices = [];
+        let faces = [];
+
+        for (let i = 0; i < position.count; i++) {
+          vertices.push({
+            x: scale.x * position.getX(i),
+            y: scale.y * position.getY(i),
+            z: scale.z * position.getZ(i),
+          });
+        }
+
+        if (index !== undefined) {
+          for (let i = 0; i < index.count; i += 3) {
+            faces.push({
+              a: index.getX(i),
+              b: index.getX(i + 1),
+              c: index.getX(i + 2),
+            });
+          }
+        } else {
+          for (let i = 0; i < position.count; i += 3) {
+            faces.push({
+              a: i,
+              b: i + 1,
+              c: i + 2,
+            });
+          }
+        }
+
+        return {
+          vertices,
+          faces,
+        };
+      };
+
+      const createGImpactCollision = (mesh, scale) => {
+        let faces, vertices;
+        let totvert = 0;
+
+        if (mesh.isMesh) {
+          let data = getMeshData(mesh);
+
+          faces = data.faces;
+          vertices = data.vertices;
+
+          totvert = vertices.length;
+        } else {
+          console.error("cannot make mesh shape for non-Mesh object");
+        }
+
+        if (totvert == 0) {
+          console.error("no vertices to define mesh shape with");
+        }
+
+        if (!scale) scale = { x: 1, y: 1, z: 1 };
+
+        /* vertices, faces */
+        let ammoMesh = new Ammo.btTriangleMesh();
+
+        for (let i = 0, l = faces.length; i < l; i++) {
+          let a = faces[i].a;
+          let b = faces[i].b;
+          let c = faces[i].c;
+          ammoMesh.addTriangle(
+            new Ammo.btVector3(vertices[a].x, vertices[a].y, vertices[a].z),
+            new Ammo.btVector3(vertices[b].x, vertices[b].y, vertices[b].z),
+            new Ammo.btVector3(vertices[c].x, vertices[c].y, vertices[c].z),
+            false,
+          );
+        }
+
+        let triangleShape = new Ammo.btGImpactMeshShape(ammoMesh);
+        triangleShape.setMargin(0.01);
+        triangleShape.setLocalScaling(new Ammo.btVector3(scale.x, scale.y, scale.z));
+        triangleShape.updateBound();
+
+        return triangleShape;
+      };
 
       const ambientColor = 0xaaaaaa; //  0xeeeeee; //0xfad5a5; ;
       const fogFar = 22; // 15; // 50;
@@ -158,31 +259,28 @@
 
       const GRAVITY = 30;
 
-      const STEPS_PER_FRAME = 5;
+      const STEPS_PER_FRAME = 1;
 
-      let levelObj;
-
+      // TODO can we revert moving the declaration of these
       let playerCollider, playerVelocity, playerDirection, playerOnFloor;
 
       const setupPlayerPhysics = () => {
-        playerCollider = new Capsule(
-          new THREE.Vector3(0, 0.35, 0),
-          new THREE.Vector3(0, 1, 0),
-          0.35,
-        );
+        const geometry = new THREE.CapsuleGeometry( 0.35, 1 );
+        const material = new THREE.MeshBasicMaterial( {color: 0x00ff00} ); 
+        playerCollider = new THREE.Mesh( geometry, material );
 
         playerVelocity = new THREE.Vector3();
         playerDirection = new THREE.Vector3();
 
         playerOnFloor = false;
 
-        const pos = { x: 0, y: 1, z: 0 };
+        const pos = { x: 0, y: 0, z: 0 };
         const quat = { x: 0, y: 0, z: 0, w: 1 };
         const mass = 1;
 
         const playerShape = new Ammo.btCapsuleShape(0.35, 0.65);
         createRigidBody(playerCollider, playerShape, mass, pos, quat);
-      }
+      };
       let mouseTime = 0;
       let pointerLocking = false;
       let updatePosition = 0;
@@ -571,7 +669,6 @@
         scene.add(activeMarkers.mesh);
       };
 
-
       const updatePhysics = (deltaTime) => {
         physicsWorld.stepSimulation(deltaTime, 10);
 
@@ -587,26 +684,31 @@
             objThree.quaternion.set(q.x(), q.y(), q.z(), q.w());
           }
         }
-      }
+      };
 
       const updatePlayer = (deltaTime) => {
-        const speed = 5;
-        const moveX = (keyStates["KeyA"] ? -1 : 0) + (keyStates["KeyD"] ? 1 : 0);
-        const moveZ = (keyStates["KeyW"] ? -1 : 0) + (keyStates["KeyS"] ? 1 : 0);
-
-        playerVelocity.set(moveX * speed, playerVelocity.y, moveZ * speed);
+        // REVIEW - aider added this but I think it's handled by controls?
+        // const speed = 5;
+        // const moveX = (keyStates["KeyA"] ? -1 : 0) + (keyStates["KeyD"] ? 1 : 0);
+        // const moveZ = (keyStates["KeyW"] ? -1 : 0) + (keyStates["KeyS"] ? 1 : 0);
+        //
+        // playerVelocity.set(moveX * speed, playerVelocity.y, moveZ * speed);
 
         const playerBody = playerCollider.userData.physicsBody;
         const playerTransform = playerBody.getWorldTransform();
         const playerPos = playerTransform.getOrigin();
         playerPos.setX(playerPos.x() + playerVelocity.x * deltaTime);
+        playerPos.setY(playerPos.y() + playerVelocity.y * deltaTime);
         playerPos.setZ(playerPos.z() + playerVelocity.z * deltaTime);
         playerTransform.setOrigin(playerPos);
 
         playerBody.setWorldTransform(playerTransform);
 
+        // FIXME
+        playerOnFloor = playerPos.y() < 0.1;
+
         camera.position.set(playerPos.x(), playerPos.y(), playerPos.z());
-      }
+      };
 
       const getForwardVector = () => {
         camera.getWorldDirection(playerDirection);
@@ -626,8 +728,10 @@
       };
 
       const controls = (deltaTime) => {
+        playerVelocity.set(0, 0, 0);
+
         // gives a bit of air control
-        const speedDelta = deltaTime * (playerOnFloor ? 25 : 8);
+        const speedDelta = /*deltaTime */ (playerOnFloor ? 25 : 8);
 
         if (keyStates["KeyW"]) {
           playerVelocity.add(getForwardVector().multiplyScalar(speedDelta));
@@ -652,51 +756,47 @@
         }
       };
 
-
-      const init = async () => {
-        levelObj = await loadObjModel("models/obj/level.obj");
-
-        const pos = { x: -60, y: -2, z: -60 };
-        const quat = { x: 0, y: 0, z: 0, w: 1 };
-        const mass = 0;
+      const loadLevel = async () => {
+        const levelObj = await loadObjModel("models/obj/level.obj");
+        const pos = new THREE.Vector3();
+        const quat = new THREE.Quaternion();
 
         levelObj.traverse((node) => {
-          if (node.isMesh) {
+          if (node.material) {
             node.material.transparent = true;
             node.material.opacity = 0.33;
-            const shape = new Ammo.btBoxShape(new Ammo.btVector3(node.scale.x / 2, node.scale.y / 2, node.scale.z / 2));
-            createRigidBody(node, shape, mass, pos, quat);
+          }
+          if (node.isMesh) {
+            const trimesh = createGImpactCollision(node);
+            pos.copy(node.position);
+            quat.copy(node.quaternion);
+
+            const body = createRigidBody(node, trimesh, 0, pos, quat);
+            body.setCollisionFlags(body.getCollisionFlags() | 1/* CF_STATIC_OBJECT */);
           }
         });
 
         scene.add(levelObj);
 
         animate();
-      })();
+      };
 
       const teleportPlayerIfOob = () => {
         if (camera.position.y <= -25) {
-          playerCollider.start.set(0, 0.35, 0);
-          playerCollider.end.set(0, 1, 0);
-          playerCollider.radius = 0.35;
-          camera.position.copy(playerCollider.end);
+          playerCollider.position.set(0, 0, 0); // REVIEW - updated from Capsule days
+          camera.position.copy(playerCollider.position);
           camera.rotation.set(0, 0, 0);
         }
       };
 
       const animate = () => {
-        const deltaTime = Math.min(0.05, clock.getDelta()) / STEPS_PER_FRAME;
+        const deltaTime = Math.min(0.05, clock.getDelta());
 
-        // we look for collisions in substeps to mitigate the risk of
-        // an object traversing another too quickly for detection.
+        controls(deltaTime);
 
-        for (let i = 0; i < STEPS_PER_FRAME; i++) {
-          controls(deltaTime);
+        updatePlayer(deltaTime);
 
-          updatePlayer(deltaTime);
-
-          teleportPlayerIfOob();
-        }
+        teleportPlayerIfOob();
 
         updatePhysics(deltaTime);
         renderer.render(scene, camera);
@@ -848,6 +948,25 @@
             }
           } else {
             activeTooltips.delete(id);
+          }
+        }
+
+        // REVIEW - handle aliases
+        for (const [id, data] of aliasedObjects) {
+          if (createdObjects.has(data.id)) {
+            const newObj = createdObjects.get(data.id).clone();
+            newObj.position.x = data.x / 10;
+            newObj.position.z = data.z / 10;
+
+            newObj.rotation.set(0, 0, 0);
+            newObj.rotateY((data.ry * Math.PI) / 180);
+
+            // TODO avoid duplication with first run
+            if (createdObjects.has(id)) {
+              scene.remove(createdObjects.get(id));
+            }
+            createdObjects.set(id, newObj);
+            scene.add(newObj);
           }
         }
 

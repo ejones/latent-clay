@@ -3,14 +3,14 @@
 # number of vertices: 8
 # number of triangles: 12
 mtllib level.mtl
-v 0 0 0
-v 100 0 0
-v 0 0 100
-v 100 0 100
-v 0 1 0
-v 100 1 0
-v 0 1 100
-v 100 1 100
+v -60 -2 -60
+v 40 -2 -60
+v -60 -2 40
+v 40 -2 40
+v -60 -1 -60
+v 40 -1 -60
+v -60 -1 40
+v 40 -1 40
 vt 125 125
 vt 187.5 187.5
 vt 125 187.5
