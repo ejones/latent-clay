@@ -161,7 +161,6 @@
 
       const STEPS_PER_FRAME = 5;
 
-      let worldOctree = new Octree();
       let levelObj;
 
       let playerCollider, playerVelocity, playerDirection, playerOnFloor;
@@ -573,21 +572,6 @@
         scene.add(activeMarkers.mesh);
       };
 
-      const playerCollisions = () => {
-        const result = worldOctree.capsuleIntersect(playerCollider);
-
-        playerOnFloor = false;
-
-        if (result) {
-          playerOnFloor = result.normal.y > 0;
-
-          if (!playerOnFloor) {
-            playerVelocity.addScaledVector(result.normal, -result.normal.dot(playerVelocity));
-          }
-
-          playerCollider.translate(result.normal.multiplyScalar(result.depth));
-        }
-      };
 
       function updatePhysics(deltaTime) {
         physicsWorld.stepSimulation(deltaTime, 10);
@@ -669,15 +653,6 @@
         }
       };
 
-      const buildOctree = () => {
-        worldOctree = new Octree();
-        console.log("create octree");
-        worldOctree.fromGraphNode(levelObj);
-        for (const obj of createdObjects.values()) {
-          worldOctree.fromGraphNode(obj);
-        }
-        console.log("done create octree");
-      };
 
       (async () => {
         levelObj = await loadObjModel("models/obj/level.obj");
@@ -692,7 +667,6 @@
         Object.assign(levelObj.position, { x: -60, y: -2, z: -60 });
         scene.add(levelObj);
 
-        buildOctree();
         animate();
       })();
 
@@ -873,34 +847,7 @@
           }
         }
 
-        // REVIEW - handle aliases
-        for (const [id, data] of aliasedObjects) {
-          if (createdObjects.has(data.id)) {
-            const newObj = createdObjects.get(data.id).clone();
-            newObj.position.x = data.x / 10;
-            newObj.position.z = data.z / 10;
-
-            newObj.rotation.set(0, 0, 0);
-            newObj.rotateY((data.ry * Math.PI) / 180);
-
-            // TODO avoid duplication with first run
-            if (createdObjects.has(id)) {
-              scene.remove(createdObjects.get(id));
-            }
-            createdObjects.set(id, newObj);
-            scene.add(newObj);
-          }
-        }
-
         redrawTooltips();
-
-        // FIXME
-        if (
-          createdObjects.size !== initialObjCount ||
-          updates.some((up) => up[2] === "door" && !up[3].msg)
-        ) {
-          buildOctree();
-        }
       };
 
       const scheduleUpdate = () =>
