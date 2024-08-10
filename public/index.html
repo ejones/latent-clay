@@ -34,7 +34,7 @@
         setupPlayerPhysics();
       });
 
-      function setupPhysicsWorld() {
+      const setupPhysicsWorld = () => {
         const collisionConfiguration = new Ammo.btDefaultCollisionConfiguration();
         const dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration);
         const broadphase = new Ammo.btDbvtBroadphase();
@@ -46,7 +46,7 @@
         transformAux1 = new Ammo.btTransform();
       }
 
-      function createRigidBody(threeObject, physicsShape, mass, pos, quat) {
+      const createRigidBody = (threeObject, physicsShape, mass, pos, quat) => {
         const transform = new Ammo.btTransform();
         transform.setIdentity();
         transform.setOrigin(new Ammo.btVector3(pos.x, pos.y, pos.z));
@@ -164,7 +164,7 @@
 
       let playerCollider, playerVelocity, playerDirection, playerOnFloor;
 
-      function setupPlayerPhysics() {
+      const setupPlayerPhysics = () => {
         playerCollider = new Capsule(
           new THREE.Vector3(0, 0.35, 0),
           new THREE.Vector3(0, 1, 0),
@@ -572,7 +572,7 @@
       };
 
 
-      function updatePhysics(deltaTime) {
+      const updatePhysics = (deltaTime) => {
         physicsWorld.stepSimulation(deltaTime, 10);
 
         for (let i = 0; i < rigidBodies.length; i++) {
@@ -589,7 +589,7 @@
         }
       }
 
-      function updatePlayer(deltaTime) {
+      const updatePlayer = (deltaTime) => {
         const speed = 5;
         const moveX = (keyStates["KeyA"] ? -1 : 0) + (keyStates["KeyD"] ? 1 : 0);
         const moveZ = (keyStates["KeyW"] ? -1 : 0) + (keyStates["KeyS"] ? 1 : 0);
@@ -653,7 +653,7 @@
       };
 
 
-      (async () => {
+      const init = async () => {
         levelObj = await loadObjModel("models/obj/level.obj");
 
         const pos = { x: -60, y: -2, z: -60 };
