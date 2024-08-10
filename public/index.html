@@ -657,14 +657,19 @@
       (async () => {
         levelObj = await loadObjModel("models/obj/level.obj");
 
+        const pos = { x: -60, y: -2, z: -60 };
+        const quat = { x: 0, y: 0, z: 0, w: 1 };
+        const mass = 0;
+
         levelObj.traverse((node) => {
-          if (node.material) {
+          if (node.isMesh) {
             node.material.transparent = true;
             node.material.opacity = 0.33;
+            const shape = new Ammo.btBoxShape(new Ammo.btVector3(node.scale.x / 2, node.scale.y / 2, node.scale.z / 2));
+            createRigidBody(node, shape, mass, pos, quat);
           }
         });
 
-        Object.assign(levelObj.position, { x: -60, y: -2, z: -60 });
         scene.add(levelObj);
 
         animate();
