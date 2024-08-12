@@ -170,6 +170,31 @@
         return triangleShape;
       };
 
+      const addObjPhysics = (obj, isStatic) => {
+        const pos = new THREE.Vector3();
+        const quat = new THREE.Quaternion();
+        if (!isStatic) {
+          pos.copy(obj.position);
+          quat.copy(obj.quaternion);
+          // TODO scale
+          const shape = new Ammo.btBoxShape(new Ammo.btVector3(.5,.5,.5));
+          //pos.y += 0.5
+          createRigidBody(obj, shape, 1, pos, quat);
+          return;
+        }
+        obj.traverse(node => {
+          if (!node.isMesh) {
+            return;
+          }
+          pos.copy(node.position);
+          quat.copy(node.quaternion);
+
+          const trimesh = createGImpactCollision(node);
+          const body = createRigidBody(node, trimesh, 0, pos, quat);
+          body.setCollisionFlags(body.getCollisionFlags() | 1/* CF_STATIC_OBJECT */);
+        });
+      };
+
       const ambientColor = 0xaaaaaa; //  0xeeeeee; //0xfad5a5; ;
       const fogFar = 22; // 15; // 50;
 
@@ -274,11 +299,11 @@
 
         playerOnFloor = false;
 
-        const pos = { x: 0, y: 0, z: 0 };
+        const pos = { x: 0, y: 0.5, z: 0 };
         const quat = { x: 0, y: 0, z: 0, w: 1 };
         const mass = 1;
 
-        const playerShape = new Ammo.btCapsuleShape(0.35, 0.65);
+        const playerShape = new Ammo.btBoxShape(new Ammo.btVector3(.4, .4, .4));
         createRigidBody(playerCollider, playerShape, mass, pos, quat);
       };
       let mouseTime = 0;
@@ -697,17 +722,23 @@
         const playerBody = playerCollider.userData.physicsBody;
         const playerTransform = playerBody.getWorldTransform();
         const playerPos = playerTransform.getOrigin();
+        /*
         playerPos.setX(playerPos.x() + playerVelocity.x * deltaTime);
         playerPos.setY(playerPos.y() + playerVelocity.y * deltaTime);
         playerPos.setZ(playerPos.z() + playerVelocity.z * deltaTime);
         playerTransform.setOrigin(playerPos);
 
         playerBody.setWorldTransform(playerTransform);
+        */
+
+        const objVel = playerBody.getLinearVelocity();
+        const velocity = new Ammo.btVector3(playerVelocity.x, objVel.y(), playerVelocity.z);
+        playerBody.setLinearVelocity(velocity);
 
         // FIXME
         playerOnFloor = playerPos.y() < 0.1;
 
-        camera.position.set(playerPos.x(), playerPos.y(), playerPos.z());
+        camera.position.set(playerPos.x(), playerPos.y() + 0.5, playerPos.z());
       };
 
       const getForwardVector = () => {
@@ -731,7 +762,7 @@
         playerVelocity.set(0, 0, 0);
 
         // gives a bit of air control
-        const speedDelta = /*deltaTime */ (playerOnFloor ? 25 : 8);
+        const speedDelta = /*deltaTime */ (playerOnFloor ? 10 : 2);
 
         if (keyStates["KeyW"]) {
           playerVelocity.add(getForwardVector().multiplyScalar(speedDelta));
@@ -758,25 +789,19 @@
 
       const loadLevel = async () => {
         const levelObj = await loadObjModel("models/obj/level.obj");
-        const pos = new THREE.Vector3();
-        const quat = new THREE.Quaternion();
 
         levelObj.traverse((node) => {
           if (node.material) {
             node.material.transparent = true;
             node.material.opacity = 0.33;
           }
-          if (node.isMesh) {
-            const trimesh = createGImpactCollision(node);
-            pos.copy(node.position);
-            quat.copy(node.quaternion);
-
-            const body = createRigidBody(node, trimesh, 0, pos, quat);
-            body.setCollisionFlags(body.getCollisionFlags() | 1/* CF_STATIC_OBJECT */);
-          }
         });
 
+        addObjPhysics(levelObj, true);
+
         scene.add(levelObj);
+
+        scheduleUpdate();
 
         animate();
       };
@@ -929,6 +954,7 @@
             if (data.ry) {
               newObj.rotateY((data.ry * Math.PI) / 180);
             }
+            addObjPhysics(newObj, isRoomSurface);
           } else if (type === "alias") {
             aliasedObjects.set(id, data);
           }
@@ -986,7 +1012,6 @@
               });
           }
         }, 1000);
-      scheduleUpdate();
     </script>
   </body>
 </html>

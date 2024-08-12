@@ -90,8 +90,8 @@ def process_tripo_mesh(mesh):
     rot = o3d.geometry.TriangleMesh.get_rotation_matrix_from_xyz((-np.pi / 2, 0, -np.pi / 2))
     new_mesh = copy.deepcopy(mesh)
     new_mesh.rotate(rot)
-    new_mesh.remove_non_manifold_edges()
-    new_mesh = new_mesh.simplify_quadric_decimation(10000)
+    #new_mesh.remove_non_manifold_edges()
+    #new_mesh = new_mesh.simplify_quadric_decimation(10000)
 
     _, new_mesh = get_stable(new_mesh)
 
