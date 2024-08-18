@@ -19,12 +19,15 @@
     <script type="module">
       import * as THREE from "three";
       import Stats from "three/addons/libs/stats.module.js";
+      import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
       import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
       import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+      import { SimplifyModifier } from "three/addons/modifiers/SimplifyModifier.js";
 
       let physicsWorld, transformAux1;
       const rigidBodies = [];
       const clock = new THREE.Clock();
+      //const updateMs = 20;
 
       Ammo().then((AmmoLib) => {
         Ammo = AmmoLib;
@@ -46,6 +49,9 @@
           collisionConfiguration,
         );
         physicsWorld.setGravity(new Ammo.btVector3(0, -9.8, 0));
+
+        Ammo.btGImpactCollisionAlgorithm.prototype.registerAlgorithm(physicsWorld.getDispatcher());
+
 
         transformAux1 = new Ammo.btTransform();
       };
@@ -79,7 +85,24 @@
         return body;
       };
 
-      const getMeshData = (mesh) => {
+      const meshToConvexHull = (mesh, simplifyTolerance) => {
+        const { position } = mesh.geometry.attributes;
+        const points = Array.from({ length: position.count }, (_, i) =>
+          new THREE.Vector3(position.getX(i), position.getY(i), position.getZ(i))
+        );
+        let geometry = new ConvexGeometry(points);
+        const modifier = new SimplifyModifier();
+        let geoSimp = modifier.modify(geometry, simplifyTolerance);
+        const material = new THREE.MeshPhongMaterial( { color: 0x00ff00 } );
+        console.log(geoSimp);
+        return new THREE.Mesh( geoSimp, material );
+      };
+
+      const getMeshData = (mesh, useConvex) => {
+        /*if (useConvex) {
+          mesh = meshToConvexHull(mesh);
+        }*/
+
         const index = mesh.geometry.index !== null ? mesh.geometry.index : undefined;
         const attributes = mesh.geometry.attributes;
         const scale = mesh.scale;
@@ -126,7 +149,7 @@
         };
       };
 
-      const createGImpactCollision = (mesh, scale) => {
+      const createGImpactCollision = (mesh, scale, margin) => {
         let faces, vertices;
         let totvert = 0;
 
@@ -162,23 +185,49 @@
           );
         }
 
+      
+        /*
+        if (useConvex) {
+          return new Ammo.btGImpactMeshShape(ammoMesh);
+        } else {
+          return new Ammo.btBvhTriangleMeshShape(ammoMesh);
+        }
+        */
+
+        //let triangleShape = new Ammo.btBvhTriangleMeshShape(ammoMesh);
         let triangleShape = new Ammo.btGImpactMeshShape(ammoMesh);
-        triangleShape.setMargin(0.01);
+        triangleShape.setMargin(margin || 0.01);
         triangleShape.setLocalScaling(new Ammo.btVector3(scale.x, scale.y, scale.z));
         triangleShape.updateBound();
 
         return triangleShape;
       };
 
-      const addObjPhysics = (obj, isStatic) => {
+      const addObjPhysics = (obj, isStatic, offset, impactObj, margin) => {
         const pos = new THREE.Vector3();
         const quat = new THREE.Quaternion();
-        if (!isStatic) {
+        if (impactObj) {
           pos.copy(obj.position);
+          if (offset) {
+            pos.add(offset);
+          }
           quat.copy(obj.quaternion);
           // TODO scale
-          const shape = new Ammo.btBoxShape(new Ammo.btVector3(.5,.5,.5));
+          //const shape = new Ammo.btBoxShape(new Ammo.btVector3(.5,.5,.5));
+          const shape = createGImpactCollision(impactObj, undefined, margin);
+
+
+          /*
+          // TODO handle obj is group
+          const { position } = obj.geometry.attributes;
+          const points = [];
+          for (let i = 0; i < position.count; i++) {
+            points.push(new Ammo.btVector3(position.getX(i), position.getY(i), position.getZ(i)));
+          }
+          const shape = new Ammo.btConvexHullShape();
+          */
           //pos.y += 0.5
+          //createRigidBody(obj, createGImpactCollision(obj), 1, pos, quat);
           createRigidBody(obj, shape, 1, pos, quat);
           return;
         }
@@ -186,10 +235,13 @@
           if (!node.isMesh) {
             return;
           }
-          pos.copy(node.position);
+          pos.copy(node.position)
+          if (offset) {
+            pos.add(offset);
+          }
           quat.copy(node.quaternion);
 
-          const trimesh = createGImpactCollision(node);
+          const trimesh = createGImpactCollision(node, undefined, margin);
           const body = createRigidBody(node, trimesh, 0, pos, quat);
           body.setCollisionFlags(body.getCollisionFlags() | 1/* CF_STATIC_OBJECT */);
         });
@@ -303,6 +355,7 @@
         const quat = { x: 0, y: 0, z: 0, w: 1 };
         const mass = 1;
 
+        // TODO revisit capsule shape
         const playerShape = new Ammo.btBoxShape(new Ammo.btVector3(.4, .4, .4));
         createRigidBody(playerCollider, playerShape, mass, pos, quat);
       };
@@ -642,7 +695,6 @@
 
       const showPrompt = (preCmd, postCmd) => {
         prompt.value = `${preCmd}${postCmd}`;
-        console.log(prompt.value);
         prompt.selectionStart = prompt.selectionEnd = preCmd.length;
         prompt.focus();
         prompt.classList.add("prompt-active");
@@ -829,6 +881,7 @@
         stats.update();
 
         requestAnimationFrame(animate);
+        //setTimeout(() => requestAnimationFrame(animate), updateMs);
       };
 
       const redrawTooltips = () => {
@@ -896,7 +949,16 @@
             }
           } else if (type === "obj" || isRoomSurface) {
             newObj = await loadObjModel(data.obj, { useVertexColors: type === "obj" });
-            newObj.position.set(data.x / 10, isRoomSurface ? -0.999 : -0.6, data.z / 10);
+
+
+            // TEMP DEBUG
+            /*
+            if (!isRoomSurface) {
+              newObj = meshToConvexHull(newObj.children[0], 4);
+            }
+            */
+
+            newObj.position.set(data.x / 10, isRoomSurface ? -0.999 : 0, data.z / 10);
             newObj.rotation.set(0, 0, 0);
             if (type === "obj" && data.scale) {
               newObj.scale.set(data.scale, data.scale, data.scale);
@@ -954,7 +1016,9 @@
             if (data.ry) {
               newObj.rotateY((data.ry * Math.PI) / 180);
             }
-            addObjPhysics(newObj, isRoomSurface);
+            addObjPhysics(newObj, isRoomSurface, new THREE.Vector3(0, isRoomSurface ? -0.999 : 0, 0),
+              !isRoomSurface ? meshToConvexHull(newObj.children[0], 5) : undefined,
+              type === 'wall' || type === 'door' ? 0.1 : undefined);
           } else if (type === "alias") {
             aliasedObjects.set(id, data);
           }
