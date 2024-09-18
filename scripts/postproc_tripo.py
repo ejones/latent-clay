@@ -91,7 +91,6 @@ def process_tripo_mesh(mesh):
     new_mesh = copy.deepcopy(mesh)
     new_mesh.rotate(rot)
     #new_mesh.remove_non_manifold_edges()
-    #new_mesh = new_mesh.simplify_quadric_decimation(10000)
 
     _, new_mesh = get_stable(new_mesh)
 
@@ -103,16 +102,17 @@ def process_tripo_mesh(mesh):
     else:
         print('could not find rotation to get model even or is already event')
         
-    return new_mesh
+    simp_mesh = new_mesh.simplify_quadric_decimation(1000)
+    return new_mesh, simp_mesh
 
 
-def main(mesh_path, output_path):
+def main(mesh_path, output_path, simp_path):
     mesh = o3d.io.read_triangle_mesh(mesh_path)
-    mesh = process_tripo_mesh(mesh)
+    mesh, simp_mesh = process_tripo_mesh(mesh)
     o3d.io.write_triangle_mesh(output_path, mesh)
+    o3d.io.write_triangle_mesh(simp_path, simp_mesh)
 
 
 if __name__ == '__main__':
     import sys
-    main(sys.argv[1], sys.argv[2])
-
+    main(sys.argv[1], sys.argv[2], sys.argv[3])

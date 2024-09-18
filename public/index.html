@@ -7,7 +7,7 @@
   </head>
   <body>
     <div id="container"></div>
-    <script src="/ammo.js"></script>
+    <script src="/ammo.wasm.js"></script>
     <script type="importmap">
       {
         "imports": {
@@ -22,7 +22,6 @@
       import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
       import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
       import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
-      import { SimplifyModifier } from "three/addons/modifiers/SimplifyModifier.js";
 
       let physicsWorld, transformAux1;
       const rigidBodies = [];
@@ -85,17 +84,25 @@
         return body;
       };
 
-      const meshToConvexHull = (mesh, simplifyTolerance) => {
+      const removeRigidBody = threeObject => {
+        const body = threeObject.userData.physicsBody;
+        physicsWorld.removeRigidBody(body);
+
+        const idx = rigidBodies.indexOf(threeObject);
+        if (idx > -1) {
+          rigidBodies.splice(idx, 1);
+        }
+      };
+
+      const meshToConvexHull = (mesh) => {
         const { position } = mesh.geometry.attributes;
         const points = Array.from({ length: position.count }, (_, i) =>
           new THREE.Vector3(position.getX(i), position.getY(i), position.getZ(i))
         );
-        let geometry = new ConvexGeometry(points);
-        const modifier = new SimplifyModifier();
-        let geoSimp = modifier.modify(geometry, simplifyTolerance);
+        const geometry = new ConvexGeometry(points);
+
         const material = new THREE.MeshPhongMaterial( { color: 0x00ff00 } );
-        console.log(geoSimp);
-        return new THREE.Mesh( geoSimp, material );
+        return new THREE.Mesh( geometry, material );
       };
 
       const getMeshData = (mesh, useConvex) => {
@@ -214,18 +221,17 @@
           quat.copy(obj.quaternion);
           // TODO scale
           //const shape = new Ammo.btBoxShape(new Ammo.btVector3(.5,.5,.5));
-          const shape = createGImpactCollision(impactObj, undefined, margin);
+          //const shape = createGImpactCollision(impactObj, undefined, margin);
 
 
-          /*
+          
           // TODO handle obj is group
-          const { position } = obj.geometry.attributes;
-          const points = [];
-          for (let i = 0; i < position.count; i++) {
-            points.push(new Ammo.btVector3(position.getX(i), position.getY(i), position.getZ(i)));
-          }
+          const { position } = impactObj.geometry.attributes;
           const shape = new Ammo.btConvexHullShape();
-          */
+          console.log('adding obj with', position.count, 'vert');
+          for (let i = 0; i < position.count; i++) {
+            shape.addPoint(new Ammo.btVector3(position.getX(i), position.getY(i), position.getZ(i)), true);
+          }
           //pos.y += 0.5
           //createRigidBody(obj, createGImpactCollision(obj), 1, pos, quat);
           createRigidBody(obj, shape, 1, pos, quat);
@@ -528,7 +534,7 @@
         });
       };
 
-      const getSelectedLocation = ({ debug = false } = {}) => {
+      const getSelectedLocation = () => {
         raycaster.setFromCamera(pointer, camera);
 
         const intr = raycaster
@@ -734,9 +740,17 @@
       };
 
       const handleClick = () => {
-        const { point } = getSelectedLocation({ debug: true });
+        const { point, object } = getSelectedLocation();
         if (!point) {
           return;
+        }
+        // TODO: search for physics body more generally
+        const physicsBody = object.userData.physicsBody || object.parent.userData.physicsBody;
+        if (physicsBody?.applyImpulse) {
+          // TODO: better implementation of fooming
+          const { x, y, z } = getForwardVector().multiplyScalar(40);
+          physicsBody.applyImpulse(new Ammo.btVector3(x, y, z));
+          //return; // REVIEW: is this intuitive enough? // FIXME - even the ground is a physics mesh
         }
         activeMarkers.push(point);
         if (activeMarkers.mesh) {
@@ -787,8 +801,15 @@
         const velocity = new Ammo.btVector3(playerVelocity.x, objVel.y(), playerVelocity.z);
         playerBody.setLinearVelocity(velocity);
 
+        if (playerVelocity.y > 0) {
+          playerBody.applyImpulse(new Ammo.btVector3(0, playerVelocity.y, 0));
+        }
+
         // FIXME
-        playerOnFloor = playerPos.y() < 0.1;
+        playerOnFloor = playerPos.y() < -0.2;
+
+        // DEBUG
+        window.__playerOnFloor = playerOnFloor;
 
         camera.position.set(playerPos.x(), playerPos.y() + 0.5, playerPos.z());
       };
@@ -834,7 +855,7 @@
 
         if (playerOnFloor) {
           if (keyStates["Space"]) {
-            playerVelocity.y = 15;
+            playerVelocity.y = 1.2;
           }
         }
       };
@@ -948,13 +969,19 @@
               };
             }
           } else if (type === "obj" || isRoomSurface) {
-            newObj = await loadObjModel(data.obj, { useVertexColors: type === "obj" });
+            newObj = await loadObjModel(
+              data.obj,
+              { useVertexColors: type === "obj" }
+            );
 
+            const simpObj = type === 'obj'
+              ? await loadObjModel(data.obj.replace(/\.obj$/, '.simp.obj'), { useVertexColors: true })
+              : null;
 
             // TEMP DEBUG
             /*
             if (!isRoomSurface) {
-              newObj = meshToConvexHull(newObj.children[0], 4);
+              newObj = meshToConvexHull(newObj.children[0], 4)
             }
             */
 
@@ -1017,13 +1044,15 @@
               newObj.rotateY((data.ry * Math.PI) / 180);
             }
             addObjPhysics(newObj, isRoomSurface, new THREE.Vector3(0, isRoomSurface ? -0.999 : 0, 0),
-              !isRoomSurface ? meshToConvexHull(newObj.children[0], 5) : undefined,
+              simpObj && meshToConvexHull(simpObj.children[0]),
               type === 'wall' || type === 'door' ? 0.1 : undefined);
           } else if (type === "alias") {
             aliasedObjects.set(id, data);
           }
           if (newObj) {
             if (createdObjects.has(id)) {
+              console.log('removing', id);
+              removeRigidBody(createdObjects.get(id));
               scene.remove(createdObjects.get(id));
             }
             createdObjects.set(id, newObj);
@@ -1042,6 +1071,7 @@
         }
 
         // REVIEW - handle aliases
+        // TODO physics for aliases
         for (const [id, data] of aliasedObjects) {
           if (createdObjects.has(data.id)) {
             const newObj = createdObjects.get(data.id).clone();
@@ -1053,6 +1083,7 @@
 
             // TODO avoid duplication with first run
             if (createdObjects.has(id)) {
+              removeRigidBody(createdObjects.get(id));
               scene.remove(createdObjects.get(id));
             }
             createdObjects.set(id, newObj);
