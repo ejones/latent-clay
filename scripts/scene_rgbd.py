@@ -60,6 +60,11 @@ def write_point_cloud(image, depth_im, path):
     depth_values = np.array(depth_im).flatten() * (image.size[1] / 255) * depth_scaling
     colors = np.array(image).reshape(-1, 3)
     points = np.indices(image.size[::-1]).reshape(2, -1).T
+
+    # Perspective correction
+    focal_length = 1.0  # Adjust this value based on your camera model
+    points[:, 0] = (points[:, 0] - image.size[0] / 2) * depth_values / focal_length
+    points[:, 1] = (points[:, 1] - image.size[1] / 2) * depth_values / focal_length
     points = np.c_[points, depth_values]
 
     with open(path, "w") as ply_file:
