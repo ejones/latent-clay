@@ -122,10 +122,6 @@ while (line := input('> ')):
     image = image.resize((800, 600))
     depth_im = depth_im.resize((800, 600))
     
-    points = write_point_cloud(image, depth_im, os.path.join(base_path, 'point_cloud.ply'))
-    create_mesh_from_points(points, os.path.join(base_path, 'mesh.ply'), tolerance=5.0)
-
-
 def create_mesh_from_points(points, path, tolerance=5.0):
     """
     Create a mesh by connecting points that are within a certain tolerance.
@@ -152,5 +148,9 @@ def create_mesh_from_points(points, path, tolerance=5.0):
         ply_file.write(f"element edge {len(edges)}\n")
         for i, j in edges:
             ply_file.write(f"{i} {j}\n")
+
+
+points = write_point_cloud(image, depth_im, os.path.join(base_path, 'point_cloud.ply'))
+create_mesh_from_points(points, os.path.join(base_path, 'mesh.ply'), tolerance=5.0)
 
 
