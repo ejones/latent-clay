@@ -43,7 +43,7 @@
             const colors = geometry.attributes.color;
             const material = new THREE.PointsMaterial({ vertexColors: !!colors, size: 0.1 });
             const points = new THREE.Points(geometry, material);
-            geometry.rotateX(-Math.PI / 2); // Rotate 90 degrees counterclockwise around the X-axis
+            geometry.rotateZ(-Math.PI / 2); // Rotate 90 degrees counterclockwise around the Z-axis
             geometry.center(); // Center the geometry
             scene.add(points);
         });
