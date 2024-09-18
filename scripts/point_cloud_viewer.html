@@ -24,7 +24,7 @@
 
         const loader = new PLYLoader();
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0xeeeeee, 1); // Set background color to light gray
@@ -36,7 +36,6 @@
         directionalLight.position.set(1, 1, 1).normalize();
         scene.add(directionalLight);
         const controls = new OrbitControls(camera, renderer.domElement);
-        controls.update();
 
         loader.load('point_cloud.ply', function (geometry) {
             console.log('Geometry loaded:', geometry);
@@ -47,6 +46,7 @@
             geometry.rotateZ(-Math.PI / 2); // Rotate 90 degrees counterclockwise around the Z-axis
             geometry.center(); // Center the geometry
             scene.add(points);
+            controls.update();
         });
 
         camera.position.set(0, 0, 50);
