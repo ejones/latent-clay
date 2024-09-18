@@ -30,26 +30,19 @@
         renderer.setClearColor(0xeeeeee, 1); // Set background color to light gray
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0x404040); // soft white light
-        scene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        directionalLight.position.set(1, 1, 1).normalize();
-        scene.add(directionalLight);
         const controls = new OrbitControls(camera, renderer.domElement);
 
         loader.load('point_cloud.ply', function (geometry) {
-            console.log('Geometry loaded:', geometry);
             const colors = geometry.attributes.color;
-            const material = new THREE.PointsMaterial({ vertexColors: !!colors, size: 0.1 });
+            const material = new THREE.PointsMaterial({ vertexColors: !!colors, size: 3  });
             const points = new THREE.Points(geometry, material);
-            geometry.scale(10, 10, 10); // Scale the geometry up by a factor of 10
             geometry.rotateZ(-Math.PI / 2); // Rotate 90 degrees counterclockwise around the Z-axis
+            geometry.rotateX(-Math.PI / 12);
             geometry.center(); // Center the geometry
             scene.add(points);
-            controls.update();
         });
 
-        camera.position.set(0, 0, 50);
+        camera.position.set(0, 0, 100);
         camera.lookAt(0, 0, 0);
 
         function animate() {
