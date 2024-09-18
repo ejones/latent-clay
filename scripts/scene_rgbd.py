@@ -56,16 +56,16 @@ def predict_depth(image):
 
 
 def write_point_cloud(image, depth_im, path):
-    depth_scaling = 2
+    depth_scaling = 1
     depth_values = np.array(depth_im).flatten() * (image.size[1] / 255) * depth_scaling
     colors = np.array(image).reshape(-1, 3)
     points = np.indices(image.size[::-1]).reshape(2, -1).T
+    points = np.c_[points, depth_values]
 
     # Perspective correction
-    focal_length = 1.0  # Adjust this value based on your camera model
-    points[:, 0] = (points[:, 0] - image.size[0] / 2) * depth_values / focal_length
-    points[:, 1] = (points[:, 1] - image.size[1] / 2) * depth_values / focal_length
-    points = np.c_[points, depth_values]
+    depth_norm = points[:, 2] / np.max(points[:, 2])
+    points[:, 0] -= (points[:, 0] - image.size[1] / 2) * depth_norm * 0.8
+    points[:, 1] -= (points[:, 1] - image.size[0] / 2) * depth_norm * 0.8
 
     with open(path, "w") as ply_file:
         ply_file.write("ply\n")
