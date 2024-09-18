@@ -20,6 +20,7 @@
     <script type="module">
         import * as THREE from "three";
         import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
+        import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
         const loader = new PLYLoader();
         const scene = new THREE.Scene();
@@ -34,6 +35,9 @@
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
         directionalLight.position.set(1, 1, 1).normalize();
         scene.add(directionalLight);
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.update();
+
         loader.load('point_cloud.ply', function (geometry) {
             console.log('Geometry loaded:', geometry);
             const material = new THREE.PointsMaterial({ color: 0x888888, size: 0.1 });
@@ -41,7 +45,8 @@
             scene.add(points);
         });
 
-        camera.position.set(0, 0, 10);
+        camera.position.set(0, 0, 50);
+        camera.lookAt(0, 0, 0);
 
         function animate() {
             requestAnimationFrame(animate);
