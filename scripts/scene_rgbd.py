@@ -69,6 +69,7 @@ def write_point_cloud(image, depth_im, path):
     points[:, 1] -= (points[:, 1] - image.size[0] / 2) * depth_norm * 0.8
 
     with open(path, "w") as ply_file:
+        return points
         ply_file.write("ply\n")
         ply_file.write("format ascii 1.0\n")
         ply_file.write(f"element vertex {len(points)}\n")
@@ -121,7 +122,7 @@ while (line := input('> ')):
     image = image.resize((800, 600))
     depth_im = depth_im.resize((800, 600))
     
-    write_point_cloud(image, depth_im, os.path.join(base_path, 'point_cloud.ply'))
+    points = write_point_cloud(image, depth_im, os.path.join(base_path, 'point_cloud.ply'))
     create_mesh_from_points(points, os.path.join(base_path, 'mesh.ply'), tolerance=5.0)
 
 
