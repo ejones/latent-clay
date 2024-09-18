@@ -40,8 +40,10 @@
 
         loader.load('point_cloud.ply', function (geometry) {
             console.log('Geometry loaded:', geometry);
-            const material = new THREE.PointsMaterial({ color: 0x888888, size: 0.1 });
+            const colors = geometry.attributes.color;
+            const material = new THREE.PointsMaterial({ vertexColors: !!colors, size: 0.1 });
             const points = new THREE.Points(geometry, material);
+            geometry.center(); // Center the geometry
             scene.add(points);
         });
 
