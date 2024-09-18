@@ -27,22 +27,22 @@
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0xeeeeee, 1); // Set background color to light gray
         document.body.appendChild(renderer.domElement);
 
         const controls = new OrbitControls(camera, renderer.domElement);
 
         loader.load('point_cloud.ply', function (geometry) {
             const colors = geometry.attributes.color;
-            const material = new THREE.PointsMaterial({ vertexColors: !!colors, size: 3  });
+            const material = new THREE.PointsMaterial({ vertexColors: !!colors, size: 5 });
             const points = new THREE.Points(geometry, material);
-            geometry.rotateZ(-Math.PI / 2); // Rotate 90 degrees counterclockwise around the Z-axis
-            geometry.rotateX(-Math.PI / 12);
-            geometry.center(); // Center the geometry
+            //geometry.rotateX(Math.PI / 12);
+            geometry.center();
+            points.position.y += 100;
+            points.rotateX(-Math.PI / 12);
             scene.add(points);
         });
 
-        camera.position.set(0, 0, 100);
+        camera.position.set(0, 0, 400);
         camera.lookAt(0, 0, 0);
 
         function animate() {
