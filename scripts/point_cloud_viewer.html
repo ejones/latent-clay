@@ -9,16 +9,26 @@
     </style>
 </head>
 <body>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module">
+        import * as THREE from "three";
+        import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
+
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const loader = new THREE.OBJLoader();
-        loader.load('point_cloud.obj', function (object) {
+        const loader = new PLYLoader();
+        loader.load('point_cloud.ply', function (object) {
             scene.add(object);
         });
 
