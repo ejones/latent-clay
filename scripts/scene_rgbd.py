@@ -11,9 +11,6 @@ from mflux.config.config import Config
 from mflux.flux.flux import Flux1
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 import torch
-from pytorch3d.structures import Pointclouds
-from pytorch3d.renderer import look_at_view_transform
-from pytorch3d.io import save_obj
 
 SCR_HEIGHT = 256
 SCR_WIDTH = 336
@@ -88,16 +85,24 @@ while (line := input('> ')):
 
     Image.fromarray(depth_im.astype('u1')).show()
 
-    # Convert depth image to point cloud using PyTorch3D
+    # Convert depth image to point cloud and save as PLY
     depth_values = depth_im.flatten()
-    colors = np.array(image).reshape(-1, 3) / 255.0
+    colors = np.array(image).reshape(-1, 3)
     points = np.indices((SCR_HEIGHT, SCR_WIDTH)).reshape(2, -1).T
     points = np.c_[points, depth_values]
 
-    # Create a Pointclouds object
-    point_cloud = Pointclouds(points=[torch.tensor(points, dtype=torch.float32)],
-                              features=[torch.tensor(colors, dtype=torch.float32)])
-
-    # Save the point cloud to an OBJ file
-    save_obj("point_cloud.obj", point_cloud.points_packed(), point_cloud.features_packed())
+    # Write to PLY file
+    with open("point_cloud.ply", "w") as ply_file:
+        ply_file.write("ply\n")
+        ply_file.write("format ascii 1.0\n")
+        ply_file.write(f"element vertex {len(points)}\n")
+        ply_file.write("property float x\n")
+        ply_file.write("property float y\n")
+        ply_file.write("property float z\n")
+        ply_file.write("property uchar red\n")
+        ply_file.write("property uchar green\n")
+        ply_file.write("property uchar blue\n")
+        ply_file.write("end_header\n")
+        for (x, y, z), (r, g, b) in zip(points, colors):
+            ply_file.write(f"{x} {y} {z} {r} {g} {b}\n")
 
