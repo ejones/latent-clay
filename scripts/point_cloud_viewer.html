@@ -27,7 +27,8 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const loader = new PLYLoader();
+        const ambientLight = new THREE.AmbientLight(0x404040); // soft white light
+        scene.add(ambientLight);
         loader.load('point_cloud.ply', function (geometry) {
             const material = new THREE.PointsMaterial({ color: 0x888888 });
             const points = new THREE.Points(geometry, material);
