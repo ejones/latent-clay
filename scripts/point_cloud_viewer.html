@@ -28,8 +28,10 @@
         document.body.appendChild(renderer.domElement);
 
         const loader = new PLYLoader();
-        loader.load('point_cloud.ply', function (object) {
-            scene.add(object);
+        loader.load('point_cloud.ply', function (geometry) {
+            const material = new THREE.PointsMaterial({ color: 0x888888 });
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
         });
 
         camera.position.z = 5;
