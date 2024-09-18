@@ -11,7 +11,9 @@ from mflux.config.config import Config
 from mflux.flux.flux import Flux1
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 import torch
-import open3d as o3d
+from pytorch3d.structures import Pointclouds
+from pytorch3d.renderer import look_at_view_transform
+from pytorch3d.io import save_obj
 
 SCR_HEIGHT = 256
 SCR_WIDTH = 336
@@ -86,29 +88,16 @@ while (line := input('> ')):
 
     Image.fromarray(depth_im.astype('u1')).show()
 
-    # Convert depth image to point cloud
-    depth_o3d = o3d.geometry.Image(depth_im)
-    color_o3d = o3d.geometry.Image(np.array(image))
-    rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
-        color_o3d, depth_o3d, convert_rgb_to_intensity=False
-    )
+    # Convert depth image to point cloud using PyTorch3D
+    depth_values = depth_im.flatten()
+    colors = np.array(image).reshape(-1, 3) / 255.0
+    points = np.indices((SCR_HEIGHT, SCR_WIDTH)).reshape(2, -1).T
+    points = np.c_[points, depth_values]
 
-    # Create camera intrinsic parameters
-    intrinsic = o3d.camera.PinholeCameraIntrinsic(
-        SCR_WIDTH, SCR_HEIGHT, SCR_WIDTH, SCR_HEIGHT, SCR_WIDTH / 2, SCR_HEIGHT / 2
-    )
+    # Create a Pointclouds object
+    point_cloud = Pointclouds(points=[torch.tensor(points, dtype=torch.float32)],
+                              features=[torch.tensor(colors, dtype=torch.float32)])
 
-    # Generate point cloud
-    pcd = o3d.geometry.PointCloud.create_from_rgbd_image(
-        rgbd_image, intrinsic
-    )
-
-    # Flip the point cloud to correct orientation
-    pcd.transform([[1, 0, 0, 0],
-                   [0, -1, 0, 0],
-                   [0, 0, -1, 0],
-                   [0, 0, 0, 1]])
-
-    # Visualize the point cloud
-    o3d.visualization.draw_geometries([pcd])
+    # Save the point cloud to an OBJ file
+    save_obj("point_cloud.obj", point_cloud.points_packed(), point_cloud.features_packed())
 
