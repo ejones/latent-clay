@@ -27,10 +27,18 @@ loader.load('path/to/humanoid/model.glb', function (gltf) {
     const bones = skeleton.bones;
     const targetPosition = new THREE.Vector3(0, 1, 0);
 
+    // Identify specific bones to manipulate
+    const armBones = bones.filter(bone => bone.name.includes('Arm'));
+    const legBones = bones.filter(bone => bone.name.includes('Leg'));
+
     function updateIK() {
         // Simple IK logic to move the end effector towards the target
-        const endEffector = bones[bones.length - 1];
-        endEffector.position.lerp(targetPosition, 0.1);
+        armBones.forEach(arm => {
+            arm.position.lerp(targetPosition, 0.1);
+        });
+        legBones.forEach(leg => {
+            leg.position.lerp(targetPosition, 0.1);
+        });
     }
 
     // Animation loop
