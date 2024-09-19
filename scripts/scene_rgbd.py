@@ -91,7 +91,7 @@ def create_mesh_from_points(image, points, path, tolerance=5.0):
     colors = np.array(image).reshape(-1, 3)
 
     edges = []
-    width, height = SCR_WIDTH, SCR_HEIGHT
+    width, height = image.size
     for y in range(height):
         for x in range(width):
             current_index = y * width + x
@@ -99,6 +99,14 @@ def create_mesh_from_points(image, points, path, tolerance=5.0):
                 edges.append((current_index, current_index + 1))
             if y < height - 1:  # Vertical edge
                 edges.append((current_index, current_index + width))
+
+    faces = []
+    for y in range(height - 1):
+        for x in range(width - 1):
+            current_index = y * width + x
+            # Create two triangles for each quad
+            faces.append((current_index, current_index + 1, current_index + width))
+            faces.append((current_index + 1, current_index + width + 1, current_index + width))
 
     with open(path, "w") as ply_file:
         ply_file.write("ply\n")
@@ -113,6 +121,8 @@ def create_mesh_from_points(image, points, path, tolerance=5.0):
         ply_file.write(f"element edge {len(edges)}\n")
         ply_file.write("property int vertex1\n")
         ply_file.write("property int vertex2\n")
+        ply_file.write(f"element face {len(faces)}\n")
+        ply_file.write("property list uchar int vertex_index\n")
         ply_file.write("end_header\n")
 
         for (y, x, z), (r, g, b) in zip(points, colors):
@@ -120,6 +130,9 @@ def create_mesh_from_points(image, points, path, tolerance=5.0):
 
         for i, j in edges:
             ply_file.write(f"{i} {j}\n")
+
+        for i, j, k in faces:
+            ply_file.write(f"3 {i} {j} {k}\n")
 
 
 histfile = os.path.join(base_path, '.history')
