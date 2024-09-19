@@ -60,7 +60,6 @@ def predict_depth(image):
 def get_point_cloud(image, depth_im):
     depth_scaling = 1
     depth_values = np.array(depth_im).flatten() * (image.size[1] / 255) * depth_scaling
-    colors = np.array(image).reshape(-1, 3)
     points = np.indices(image.size[::-1]).reshape(2, -1).T
     points = np.c_[points, depth_values]
 
@@ -85,10 +84,22 @@ def get_point_cloud(image, depth_im):
 #             ply_file.write(f"{x} {SCR_HEIGHT - y} {z} {r} {g} {b}\n")
 
 
-def create_mesh_from_points(points, path, tolerance=5.0):
+def create_mesh_from_points(image, points, path, tolerance=5.0):
     """
     Create a mesh by connecting points that are within a certain tolerance.
     """
+    colors = np.array(image).reshape(-1, 3)
+
+    edges = []
+    width, height = SCR_WIDTH, SCR_HEIGHT
+    for y in range(height):
+        for x in range(width):
+            current_index = y * width + x
+            if x < width - 1:  # Horizontal edge
+                edges.append((current_index, current_index + 1))
+            if y < height - 1:  # Vertical edge
+                edges.append((current_index, current_index + width))
+
     with open(path, "w") as ply_file:
         ply_file.write("ply\n")
         ply_file.write("format ascii 1.0\n")
@@ -96,24 +107,17 @@ def create_mesh_from_points(points, path, tolerance=5.0):
         ply_file.write("property float x\n")
         ply_file.write("property float y\n")
         ply_file.write("property float z\n")
-        ply_file.write("element edge 0\n")
+        ply_file.write("property uchar red\n")
+        ply_file.write("property uchar green\n")
+        ply_file.write("property uchar blue\n")
+        ply_file.write(f"element edge {len(edges)}\n")
         ply_file.write("property int vertex1\n")
         ply_file.write("property int vertex2\n")
         ply_file.write("end_header\n")
-        for (y, x, z) in points:
-            ply_file.write(f"{x} {SCR_HEIGHT - y} {z}\n")
 
-        edges = []
-        width, height = SCR_WIDTH, SCR_HEIGHT
-        for y in range(height):
-            for x in range(width):
-                current_index = y * width + x
-                if x < width - 1:  # Horizontal edge
-                    edges.append((current_index, current_index + 1))
-                if y < height - 1:  # Vertical edge
-                    edges.append((current_index, current_index + width))
+        for (y, x, z), (r, g, b) in zip(points, colors):
+            ply_file.write(f"{x} {SCR_HEIGHT - y} {z} {r} {g} {b}\n")
 
-        ply_file.write(f"element edge {len(edges)}\n")
         for i, j in edges:
             ply_file.write(f"{i} {j}\n")
 
@@ -157,6 +161,6 @@ while (line := input('> ')):
     #image = image.resize((800, 600))
     #depth_im = depth_im.resize((800, 600))
     points = get_point_cloud(image, depth_im)
-    create_mesh_from_points(points, os.path.join(base_path, 'mesh.ply'), tolerance=5.0)
+    create_mesh_from_points(image, points, os.path.join(base_path, 'mesh.ply'), tolerance=5.0)
 
 
