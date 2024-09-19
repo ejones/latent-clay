@@ -31,9 +31,9 @@
 
         const controls = new OrbitControls(camera, renderer.domElement);
 
-        loader.load('point_cloud.ply', function (geometry) {
+        loader.load('mesh.ply', function (geometry) {
             const colors = geometry.attributes.color;
-            const material = new THREE.PointsMaterial({ vertexColors: !!colors, size: 5 });
+            const material = new THREE.PointsMaterial({ vertexColors: !!colors, size: 1 });
             const points = new THREE.Points(geometry, material);
             //geometry.rotateX(Math.PI / 12);
             geometry.center();
