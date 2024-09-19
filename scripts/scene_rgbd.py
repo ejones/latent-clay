@@ -104,9 +104,14 @@ def create_mesh_from_points(points, path, tolerance=5.0):
             ply_file.write(f"{x} {SCR_HEIGHT - y} {z}\n")
 
         edges = []
-        for i, j in tqdm.tqdm(list(itertools.combinations(range(len(points)), 2))):
-            if np.linalg.norm(np.array(points[i]) - np.array(points[j])) < tolerance:
-                edges.append((i, j))
+        width, height = SCR_WIDTH, SCR_HEIGHT
+        for y in range(height):
+            for x in range(width):
+                current_index = y * width + x
+                if x < width - 1:  # Horizontal edge
+                    edges.append((current_index, current_index + 1))
+                if y < height - 1:  # Vertical edge
+                    edges.append((current_index, current_index + width))
 
         ply_file.write(f"element edge {len(edges)}\n")
         for i, j in edges:
