@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { IK, IKChain, IKJoint } from 'three-ik';
+import { CCDIKSolver } from 'three/examples/jsm/animation/CCDIKSolver.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 // Initialize scene, camera, and renderer
@@ -23,28 +23,25 @@ loader.load('path/to/humanoid/model.glb', function (gltf) {
     const skeleton = new SkeletonHelper(model);
     scene.add(skeleton);
 
-    // Set up IK
-    const ik = new IK();
-    const chain = new IKChain();
-
-    // Assuming the model has a bone structure with names like 'Arm' and 'Leg'
-    const armBone = skeleton.getBoneByName('Arm');
-    const handBone = skeleton.getBoneByName('Hand');
-
-    if (armBone && handBone) {
-        chain.add(new IKJoint(armBone, { constraints: [] }));
-        chain.add(new IKJoint(handBone, { constraints: [] }));
-        ik.add(chain);
-
-        const target = new THREE.Object3D();
-        target.position.set(0, 1, 0);
-        scene.add(target);
-
-        chain.setTarget(target);
-
-        function updateIK() {
-            ik.solve();
+    // Set up CCDIKSolver
+    const iks = [
+        {
+            target: 1, // Assuming the target bone index
+            effector: 2, // Assuming the effector bone index
+            links: [
+                { index: 3 }, // Assuming the bone index
+                { index: 4 }, // Assuming the bone index
+            ],
+            iteration: 10,
+            minAngle: 0.0,
+            maxAngle: Math.PI
         }
+    ];
+
+    const ccdikSolver = new CCDIKSolver(model, iks);
+
+    function updateIK() {
+        ccdikSolver.update();
     }
 
     // Animation loop
