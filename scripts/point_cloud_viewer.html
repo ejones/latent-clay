@@ -33,13 +33,12 @@
 
         loader.load('mesh.ply', function (geometry) {
             const colors = geometry.attributes.color;
-            const material = new THREE.PointsMaterial({ vertexColors: !!colors, size: 1 });
-            const points = new THREE.Points(geometry, material);
-            //geometry.rotateX(Math.PI / 12);
+            const material = new THREE.MeshBasicMaterial({ vertexColors: !!colors, side: THREE.DoubleSide });
+            const mesh = new THREE.Mesh(geometry, material);
             geometry.center();
-            points.position.y += 100;
-            points.rotateX(-Math.PI / 12);
-            scene.add(points);
+            mesh.position.y += 100;
+            mesh.rotateX(-Math.PI / 12);
+            scene.add(mesh);
         });
 
         camera.position.set(0, 0, 400);
