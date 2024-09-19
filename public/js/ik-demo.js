@@ -23,25 +23,30 @@ loader.load('path/to/humanoid/model.glb', function (gltf) {
     const skeleton = new SkeletonHelper(model);
     scene.add(skeleton);
 
-    // Set up CCDIKSolver
-    const iks = [
-        {
-            target: 1, // Assuming the target bone index
-            effector: 2, // Assuming the effector bone index
-            links: [
-                { index: 3 }, // Assuming the bone index
-                { index: 4 }, // Assuming the bone index
-            ],
-            iteration: 10,
-            minAngle: 0.0,
-            maxAngle: Math.PI
+    // Find bones by name
+    const bones = skeleton.bones;
+    const targetBone = bones.find(bone => bone.name.includes('Hand'));
+    const effectorBone = bones.find(bone => bone.name.includes('Forearm'));
+    const linkBones = bones.filter(bone => bone.name.includes('UpperArm') || bone.name.includes('Shoulder'));
+
+    if (targetBone && effectorBone && linkBones.length > 0) {
+        // Set up CCDIKSolver
+        const iks = [
+            {
+                target: bones.indexOf(targetBone),
+                effector: bones.indexOf(effectorBone),
+                links: linkBones.map(bone => ({ index: bones.indexOf(bone) })),
+                iteration: 10,
+                minAngle: 0.0,
+                maxAngle: Math.PI
+            }
+        ];
+
+        const ccdikSolver = new CCDIKSolver(model, iks);
+
+        function updateIK() {
+            ccdikSolver.update();
         }
-    ];
-
-    const ccdikSolver = new CCDIKSolver(model, iks);
-
-    function updateIK() {
-        ccdikSolver.update();
     }
 
     // Animation loop
