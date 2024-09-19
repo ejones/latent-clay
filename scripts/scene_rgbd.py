@@ -123,6 +123,9 @@ def create_mesh_from_points(image, points, path, tolerance=5.0):
         ply_file.write("property int vertex2\n")
         ply_file.write(f"element face {len(faces)}\n")
         ply_file.write("property list uchar int vertex_index\n")
+        ply_file.write("property uchar red\n")
+        ply_file.write("property uchar green\n")
+        ply_file.write("property uchar blue\n")
         ply_file.write("end_header\n")
 
         for (y, x, z), (r, g, b) in zip(points, colors):
@@ -132,7 +135,8 @@ def create_mesh_from_points(image, points, path, tolerance=5.0):
             ply_file.write(f"{i} {j}\n")
 
         for i, j, k in faces:
-            ply_file.write(f"3 {i} {j} {k}\n")
+            r, g, b = 255, 255, 255 # ??? TODO
+            ply_file.write(f"3 {i} {j} {k} {r} {g} {b}\n")
 
 
 histfile = os.path.join(base_path, '.history')
