@@ -13,6 +13,7 @@ from mflux.config.config import Config
 from mflux.flux.flux import Flux1
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 import torch
+import tqdm
 
 SCR_HEIGHT = 256
 SCR_WIDTH = 336
@@ -56,7 +57,7 @@ def predict_depth(image):
     return Image.fromarray(prediction.squeeze().cpu().numpy().astype('u1'))
 
 
-def write_point_cloud(image, depth_im, path):
+def get_point_cloud(image, depth_im):
     depth_scaling = 1
     depth_values = np.array(depth_im).flatten() * (image.size[1] / 255) * depth_scaling
     colors = np.array(image).reshape(-1, 3)
@@ -67,21 +68,50 @@ def write_point_cloud(image, depth_im, path):
     depth_norm = points[:, 2] / np.max(points[:, 2])
     points[:, 0] -= (points[:, 0] - image.size[1] / 2) * depth_norm * 0.8
     points[:, 1] -= (points[:, 1] - image.size[0] / 2) * depth_norm * 0.8
+    return points
+# 
+#     with open(path, "w") as ply_file:
+#         ply_file.write("ply\n")
+#         ply_file.write("format ascii 1.0\n")
+#         ply_file.write(f"element vertex {len(points)}\n")
+#         ply_file.write("property float x\n")
+#         ply_file.write("property float y\n")
+#         ply_file.write("property float z\n")
+#         ply_file.write("property uchar red\n")
+#         ply_file.write("property uchar green\n")
+#         ply_file.write("property uchar blue\n")
+#         ply_file.write("end_header\n")
+#         for (y, x, z), (r, g, b) in zip(points, colors):
+#             ply_file.write(f"{x} {SCR_HEIGHT - y} {z} {r} {g} {b}\n")
 
+
+def create_mesh_from_points(points, path, tolerance=5.0):
+    """
+    Create a mesh by connecting points that are within a certain tolerance.
+    """
     with open(path, "w") as ply_file:
-        return points
         ply_file.write("ply\n")
         ply_file.write("format ascii 1.0\n")
         ply_file.write(f"element vertex {len(points)}\n")
         ply_file.write("property float x\n")
         ply_file.write("property float y\n")
         ply_file.write("property float z\n")
-        ply_file.write("property uchar red\n")
-        ply_file.write("property uchar green\n")
-        ply_file.write("property uchar blue\n")
+        ply_file.write("element edge 0\n")
+        ply_file.write("property int vertex1\n")
+        ply_file.write("property int vertex2\n")
         ply_file.write("end_header\n")
-        for (y, x, z), (r, g, b) in zip(points, colors):
-            ply_file.write(f"{x} {SCR_HEIGHT - y} {z} {r} {g} {b}\n")
+        for (y, x, z) in points:
+            ply_file.write(f"{x} {SCR_HEIGHT - y} {z}\n")
+
+        edges = []
+        for i, j in tqdm.tqdm(list(itertools.combinations(range(len(points)), 2))):
+            if np.linalg.norm(np.array(points[i]) - np.array(points[j])) < tolerance:
+                edges.append((i, j))
+
+        ply_file.write(f"element edge {len(edges)}\n")
+        for i, j in edges:
+            ply_file.write(f"{i} {j}\n")
+
 
 histfile = os.path.join(base_path, '.history')
 try:
@@ -119,38 +149,9 @@ while (line := input('> ')):
 
     depth_im = predict_depth(image)
 
-    image = image.resize((800, 600))
-    depth_im = depth_im.resize((800, 600))
-    
-def create_mesh_from_points(points, path, tolerance=5.0):
-    """
-    Create a mesh by connecting points that are within a certain tolerance.
-    """
-    with open(path, "w") as ply_file:
-        ply_file.write("ply\n")
-        ply_file.write("format ascii 1.0\n")
-        ply_file.write(f"element vertex {len(points)}\n")
-        ply_file.write("property float x\n")
-        ply_file.write("property float y\n")
-        ply_file.write("property float z\n")
-        ply_file.write("element edge 0\n")
-        ply_file.write("property int vertex1\n")
-        ply_file.write("property int vertex2\n")
-        ply_file.write("end_header\n")
-        for (y, x, z) in points:
-            ply_file.write(f"{x} {SCR_HEIGHT - y} {z}\n")
-
-        edges = []
-        for i, j in itertools.combinations(range(len(points)), 2):
-            if np.linalg.norm(np.array(points[i]) - np.array(points[j])) < tolerance:
-                edges.append((i, j))
-
-        ply_file.write(f"element edge {len(edges)}\n")
-        for i, j in edges:
-            ply_file.write(f"{i} {j}\n")
-
-
-points = write_point_cloud(image, depth_im, os.path.join(base_path, 'point_cloud.ply'))
-create_mesh_from_points(points, os.path.join(base_path, 'mesh.ply'), tolerance=5.0)
+    #image = image.resize((800, 600))
+    #depth_im = depth_im.resize((800, 600))
+    points = get_point_cloud(image, depth_im)
+    create_mesh_from_points(points, os.path.join(base_path, 'mesh.ply'), tolerance=5.0)
 
 
