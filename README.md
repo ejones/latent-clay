@@ -42,7 +42,9 @@ To set a preferred GPU device (by default it will guess CUDA or Metal as availab
 venv/bin/python -m latentclay.server --device ...
 ```
 
-## Tutorial
+## IK Demo Setup
+
+To run the IK demo, you need a humanoid model in GLTF format. Please refer to the `public/README.md` for detailed instructions on obtaining and setting up a model for the IK demo.
 
 See the video at the top and follow along with these guides.
 
