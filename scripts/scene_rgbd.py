@@ -135,7 +135,10 @@ def create_mesh_from_points(image, points, path, tolerance=5.0):
             ply_file.write(f"{i} {j}\n")
 
         for i, j, k in faces:
-            r, g, b = 255, 255, 255 # ??? TODO
+            # Calculate the average color of the vertices
+            r = (colors[i][0] + colors[j][0] + colors[k][0]) // 3
+            g = (colors[i][1] + colors[j][1] + colors[k][1]) // 3
+            b = (colors[i][2] + colors[j][2] + colors[k][2]) // 3
             ply_file.write(f"3 {i} {j} {k} {r} {g} {b}\n")
 
 
