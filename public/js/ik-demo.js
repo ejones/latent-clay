@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { SkeletonHelper } from 'three/examples/jsm/helpers/SkeletonHelper.js';
+import { IK, IKChain, IKJoint } from 'three-ik';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 // Initialize scene, camera, and renderer
@@ -23,22 +23,28 @@ loader.load('path/to/humanoid/model.glb', function (gltf) {
     const skeleton = new SkeletonHelper(model);
     scene.add(skeleton);
 
-    // Set up IK (this is a simple example, real IK would be more complex)
-    const bones = skeleton.bones;
-    const targetPosition = new THREE.Vector3(0, 1, 0);
+    // Set up IK
+    const ik = new IK();
+    const chain = new IKChain();
 
-    // Identify specific bones to manipulate
-    const armBones = bones.filter(bone => bone.name.includes('Arm'));
-    const legBones = bones.filter(bone => bone.name.includes('Leg'));
+    // Assuming the model has a bone structure with names like 'Arm' and 'Leg'
+    const armBone = skeleton.getBoneByName('Arm');
+    const handBone = skeleton.getBoneByName('Hand');
 
-    function updateIK() {
-        // Simple IK logic to move the end effector towards the target
-        armBones.forEach(arm => {
-            arm.position.lerp(targetPosition, 0.1);
-        });
-        legBones.forEach(leg => {
-            leg.position.lerp(targetPosition, 0.1);
-        });
+    if (armBone && handBone) {
+        chain.add(new IKJoint(armBone, { constraints: [] }));
+        chain.add(new IKJoint(handBone, { constraints: [] }));
+        ik.add(chain);
+
+        const target = new THREE.Object3D();
+        target.position.set(0, 1, 0);
+        scene.add(target);
+
+        chain.setTarget(target);
+
+        function updateIK() {
+            ik.solve();
+        }
     }
 
     // Animation loop
