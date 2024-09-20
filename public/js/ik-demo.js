@@ -67,10 +67,10 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
                 effector: bones.indexOf(effectorBone),
                 links: linkBones.map(bone => ({
                     index: bones.indexOf(bone),
-                    limitation: {
-                        min: new THREE.Vector3(-Math.PI / 2, -Math.PI / 2, -Math.PI / 2),
-                        max: new THREE.Vector3(Math.PI / 2, Math.PI / 2, Math.PI / 2)
-                    }
+                    limitation: undefined, // Optional: Set specific limitations if needed
+                    rotationMin: new THREE.Vector3(-Math.PI / 2, -Math.PI / 2, -Math.PI / 2),
+                    rotationMax: new THREE.Vector3(Math.PI / 2, Math.PI / 2, Math.PI / 2),
+                    enabled: true
                 })),
                 iteration: 10,
                 minAngle: 0.0,
