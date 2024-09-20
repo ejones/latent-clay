@@ -17,11 +17,18 @@ const controls = new OrbitControls(camera, renderer.domElement);
 // Load humanoid model
 const loader = new GLTFLoader();
 loader.load('models/gltf/Xbot.glb', function (gltf) {
-    const model = gltf.scene;
-    scene.add(model);
+    const group = gltf.scene;
+    scene.add(group);
+
+    let model;
+    group.traverse(node => {
+        if (!model && node.isSkinnedMesh) {
+            model = node;
+        }
+    });
 
     // Add skeleton helper
-    const skeleton = new SkeletonHelper(model);
+    const skeleton = new SkeletonHelper(group);
     scene.add(skeleton);
 
     // Find bones by name
@@ -41,6 +48,9 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     console.log('Link Bones:', linkBones.map(bone => bone.name));
 
     let ccdikSolver;
+
+    console.log(bones);
+    console.log(model.skeleton.bones);
 
     if (targetBone && effectorBone && linkBones.length > 0) {
         // Set up CCDIKSolver
