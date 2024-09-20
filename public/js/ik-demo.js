@@ -57,7 +57,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     const baseBone = link;
     const targetBone = new THREE.Bone();
     baseBone.add(targetBone);
-    targetBone.position.set(0, 0, 0); // Adjust the position as needed
+    targetBone.position.set(0, 0, 5); // Position the target bone 5 units in front of the base bone
 
     console.log('Target Bone:', targetBone ? targetBone.name : 'Not found');
     console.log('Effector Bone:', effectorBone ? effectorBone.name : 'Not found');
