@@ -78,9 +78,8 @@ const updateWave = (targetBone, deltaTime) => {
     const waveAmplitudeY = 10;
     const waveFrequency = 10;
 
-    const elapsedTime = clock.getElapsedTime();
-    const newX = 20 + waveAmplitudeX * Math.cos(waveFrequency * elapsedTime);
-    const newY = 40 + waveAmplitudeY * Math.sin(waveFrequency * elapsedTime);
+    const newX = 20 + waveAmplitudeX * Math.cos(waveFrequency * deltaTime);
+    const newY = 40 + waveAmplitudeY * Math.sin(waveFrequency * deltaTime);
 
     targetBone.position.set(newX, newY, 0);
 };
@@ -125,7 +124,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         const headBone = targetBones.head;
         if (headBone) {
             const nodFrequency = 2;
-            headBone.position.y = 0.1 * Math.sin(nodFrequency * clock.getElapsedTime());
+            headBone.position.y = 0.1 * Math.sin(nodFrequency * deltaTime);
         }
     }
 
@@ -134,8 +133,8 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         const rightHandBone = targetBones.rightHand;
         if (leftHandBone && rightHandBone) {
             const waveFrequency = 3;
-            leftHandBone.position.z = 0.5 * Math.sin(waveFrequency * clock.getElapsedTime());
-            rightHandBone.position.z = -0.5 * Math.sin(waveFrequency * clock.getElapsedTime());
+            leftHandBone.position.z = 0.5 * Math.sin(waveFrequency * deltaTime);
+            rightHandBone.position.z = -0.5 * Math.sin(waveFrequency * deltaTime);
         }
     }
 
@@ -144,8 +143,8 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         const rightFootBone = targetBones.rightFoot;
         if (leftFootBone && rightFootBone) {
             const walkFrequency = 2;
-            leftFootBone.position.y = 0.3 * Math.sin(walkFrequency * clock.getElapsedTime());
-            rightFootBone.position.y = -0.3 * Math.sin(walkFrequency * clock.getElapsedTime());
+            leftFootBone.position.y = 0.3 * Math.sin(walkFrequency * deltaTime);
+            rightFootBone.position.y = -0.3 * Math.sin(walkFrequency * deltaTime);
         }
     }
 
