@@ -51,6 +51,12 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         }
     }
 
+    function updateIK() {
+        if (ccdikSolver) {
+            ccdikSolver.update();
+        }
+    }
+
     // Animation loop
     function animate() {
         requestAnimationFrame(animate);
