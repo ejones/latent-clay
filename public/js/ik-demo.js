@@ -30,6 +30,8 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     const effectorBone = bones.find(bone => bone.name.includes('Forearm'));
     const linkBones = bones.filter(bone => bone.name.includes('UpperArm') || bone.name.includes('Shoulder'));
 
+    let ccdikSolver;
+
     if (targetBone && effectorBone && linkBones.length > 0) {
         // Set up CCDIKSolver
         const iks = [
@@ -43,7 +45,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
             }
         ];
 
-        const ccdikSolver = new CCDIKSolver(model, iks);
+        ccdikSolver = new CCDIKSolver(model, iks);
     }
 
     function updateIK() {
