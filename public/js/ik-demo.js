@@ -96,14 +96,17 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     }
 
     function updateTarget(deltaTime) {
-        const waveAmplitude = 5; // Amplitude of the wave motion
+        const waveAmplitudeX = 5; // Amplitude of the wave motion in X
+        const waveAmplitudeY = 2; // Amplitude of the wave motion in Y
         const waveFrequency = 1; // Frequency of the wave motion
 
-        // Calculate the new Y position using a sine wave
-        const newY = 20 + waveAmplitude * Math.sin(waveFrequency * clock.getElapsedTime());
+        // Calculate the new X and Y positions using sine and cosine waves
+        const elapsedTime = clock.getElapsedTime();
+        const newX = waveAmplitudeX * Math.cos(waveFrequency * elapsedTime);
+        const newY = 20 + waveAmplitudeY * Math.sin(waveFrequency * elapsedTime);
 
         // Update the targetBone position
-        targetBone.position.set(0, newY, -2);
+        targetBone.position.set(newX, newY, -2);
     }
 
     // Animation loop
