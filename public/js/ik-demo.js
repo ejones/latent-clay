@@ -30,6 +30,10 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     const effectorBone = bones.find(bone => bone.name.includes('Forearm'));
     const linkBones = bones.filter(bone => bone.name.includes('UpperArm') || bone.name.includes('Shoulder'));
 
+    console.log('Target Bone:', targetBone ? targetBone.name : 'Not found');
+    console.log('Effector Bone:', effectorBone ? effectorBone.name : 'Not found');
+    console.log('Link Bones:', linkBones.map(bone => bone.name));
+
     let ccdikSolver;
 
     if (targetBone && effectorBone && linkBones.length > 0) {
@@ -49,7 +53,9 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     }
 
     function updateIK() {
+        console.log('updateIK called');
         if (ccdikSolver) {
+            console.log('ccdikSolver is updating');
             ccdikSolver.update();
         }
     }
