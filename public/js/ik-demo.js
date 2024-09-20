@@ -60,14 +60,6 @@ const wireUpForIk = (model, specs) => {
 
         return [name, { targetBone, makeIk }];
     });
-
-    const [targetBones, iks] = wireUpForIk(model, {
-        leftHand: {base: 'LeftShoulder', effector: 'LeftHand'},
-        rightHand: {base: 'RightShoulder', effector: 'RightHand'},
-        head: {base: 'Spine2', effector: 'Head'},
-        leftFoot: {base: 'LeftUpLeg', effector: 'LeftFoot'},
-        rightFoot: {base: 'RightUpLeg', effector: 'RightFoot'},
-    });
     
     const newBones = [...bones, ...ikPairs.map(([, { targetBone }]) => targetBone)];
     model.skeleton = new THREE.Skeleton(newBones);
@@ -111,6 +103,9 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     const [targetBones, iks] = wireUpForIk(model, {
         leftHand: {base: 'LeftShoulder', effector: 'LeftHand'},
         rightHand: {base: 'RightShoulder', effector: 'RightHand'},
+        head: {base: 'Spine2', effector: 'Head'},
+        leftFoot: {base: 'LeftUpLeg', effector: 'LeftFoot'},
+        rightFoot: {base: 'RightUpLeg', effector: 'RightFoot'},
     });
 
     const skeleton = new SkeletonHelper(group);
