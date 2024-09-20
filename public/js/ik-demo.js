@@ -11,6 +11,13 @@ const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+const ambientLight = new THREE.AmbientLight(0x404040); // soft white light
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+directionalLight.position.set(1, 1, 1).normalize();
+scene.add(directionalLight);
+
 // Add orbit controls
 const controls = new OrbitControls(camera, renderer.domElement);
 
@@ -97,4 +104,4 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
 });
 
 // Set camera position
-camera.position.z = 5;
+camera.position.set(0, 1, 5);
