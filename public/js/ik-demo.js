@@ -27,7 +27,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     // Find bones by name
     const bones = skeleton.bones;
     const targetBone = bones.find(bone => bone.name.includes('Hand'));
-    const effectorBone = bones.find(bone => bone.name.includes('Forearm'));
+    const effectorBone = bones.find(bone => bone.name.includes('LowerArm') || bone.name.includes('Forearm'));
     const linkBones = bones.filter(bone => bone.name.includes('UpperArm') || bone.name.includes('Shoulder'));
 
     console.log('Target Bone:', targetBone ? targetBone.name : 'Not found');
