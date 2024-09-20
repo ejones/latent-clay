@@ -96,8 +96,14 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     }
 
     function updateTarget(deltaTime) {
-        // TODO: use deltaTime to animate this in a Y arc - for a "waving" motion
-        targetBone.position.set(0, 20, -2);
+        const waveAmplitude = 5; // Amplitude of the wave motion
+        const waveFrequency = 1; // Frequency of the wave motion
+
+        // Calculate the new Y position using a sine wave
+        const newY = 20 + waveAmplitude * Math.sin(waveFrequency * clock.getElapsedTime());
+
+        // Update the targetBone position
+        targetBone.position.set(0, newY, -2);
     }
 
     // Animation loop
