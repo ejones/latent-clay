@@ -44,7 +44,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         ];
 
         const ccdikSolver = new CCDIKSolver(model, iks);
-
+    }
 
     function updateIK() {
         if (ccdikSolver) {
