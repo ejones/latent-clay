@@ -15,7 +15,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 
 // Load humanoid model
 const loader = new GLTFLoader();
-loader.load('path/to/humanoid/model.glb', function (gltf) {
+loader.load('models/gltf/Xbot.glb', function (gltf) {
     const model = gltf.scene;
     scene.add(model);
 
