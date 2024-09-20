@@ -29,10 +29,14 @@ const wireUpForIk = (model, specs) => {
     const ikPairs = Object.entries(specs).map(([name, spec]) => {
         const effectorBone = bones.find(bone => bone.name.includes(spec.effector));
         const linkBones = [];
+        const targetPos = new THREE.Vector3();
+        targetPos.copy(effectorBone.position);
 
         let link = effectorBone.parent;
         while (link && !link.name?.includes(spec.base)) {
             linkBones.push(link);
+            targetPos.add(link.position);
+            console.log('add', link.name, link.position.x, link.position.y, link.position.z);
             link = link.parent;
         }
         if (!link?.name?.includes(spec.base)) {
@@ -42,6 +46,7 @@ const wireUpForIk = (model, specs) => {
 
         const baseBone = link;
         const targetBone = new THREE.Bone({name: `target_${effectorBone.name}`});
+        targetBone.position.copy(targetPos);
         baseBone.add(targetBone);
 
         const makeIk = bones => ({
@@ -85,6 +90,37 @@ const updateWave = (targetBone) => {
     targetBone.position.set(newX, newY, 0);
 };
 
+function animateHead(targetBones) {
+    const headBone = targetBones.head;
+    if (headBone) {
+        const nodFrequency = 5;
+        const elapsedTime = clock.getElapsedTime();
+        headBone.position.z = 5 + 5 * Math.sin(nodFrequency * elapsedTime);
+    }
+}
+
+function animateArms(targetBones) {
+    const leftHandBone = targetBones.leftHand;
+    const rightHandBone = targetBones.rightHand;
+    if (leftHandBone && rightHandBone) {
+        const waveFrequency = 10;
+        const elapsedTime = clock.getElapsedTime();
+        leftHandBone.position.z = 30 * Math.sin(waveFrequency * elapsedTime);
+        rightHandBone.position.z = -30 * Math.sin(waveFrequency * elapsedTime);
+    }
+}
+
+function animateLegs(targetBones) {
+    const leftFootBone = targetBones.leftFoot;
+    const rightFootBone = targetBones.rightFoot;
+    if (leftFootBone && rightFootBone) {
+        const walkFrequency = 10;
+        const elapsedTime = clock.getElapsedTime();
+        leftFootBone.position.z = 18 * Math.sin(walkFrequency * elapsedTime);
+        rightFootBone.position.z = -18 * Math.sin(walkFrequency * elapsedTime);
+    }
+}
+
 // Load humanoid model
 const loader = new GLTFLoader();
 loader.load('models/gltf/Xbot.glb', function (gltf) {
@@ -109,53 +145,24 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     });
 
     const skeleton = new SkeletonHelper(group);
-    scene.add(skeleton);
+    //scene.add(skeleton);
+
+    targetBones.rightHand.position.set(-25, -100, 0);
+    targetBones.leftHand.position.set(25, -100, 0);
 
     const ccdikSolver = new CCDIKSolver(model, iks);
 
     function updateTargetBones() {
-        updateWave(targetBones.leftHand);
-        targetBones.rightHand.position.set(-25, -100, 0);
+        //updateWave(targetBones.leftHand);
         animateHead(targetBones);
         animateArms(targetBones);
         animateLegs(targetBones);
     }
 
-    function animateHead(targetBones) {
-        const headBone = targetBones.head;
-        if (headBone) {
-            const nodFrequency = 2;
-            const elapsedTime = clock.getElapsedTime();
-            headBone.position.y = 0.1 * Math.sin(nodFrequency * elapsedTime);
-        }
-    }
-
-    function animateArms(targetBones) {
-        const leftHandBone = targetBones.leftHand;
-        const rightHandBone = targetBones.rightHand;
-        if (leftHandBone && rightHandBone) {
-            const waveFrequency = 3;
-            const elapsedTime = clock.getElapsedTime();
-            leftHandBone.position.z = 0.5 * Math.sin(waveFrequency * elapsedTime);
-            rightHandBone.position.z = -0.5 * Math.sin(waveFrequency * elapsedTime);
-        }
-    }
-
-    function animateLegs(targetBones) {
-        const leftFootBone = targetBones.leftFoot;
-        const rightFootBone = targetBones.rightFoot;
-        if (leftFootBone && rightFootBone) {
-            const walkFrequency = 2;
-            const elapsedTime = clock.getElapsedTime();
-            leftFootBone.position.y = 0.3 * Math.sin(walkFrequency * elapsedTime);
-            rightFootBone.position.y = -0.3 * Math.sin(walkFrequency * elapsedTime);
-        }
-    }
-
     // Animation loop
     function animate() {
         requestAnimationFrame(animate);
-        updateTargetBones(deltaTime);
+        updateTargetBones();
         ccdikSolver.update();
         controls.update();
         renderer.render(scene, camera);
