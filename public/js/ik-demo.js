@@ -23,11 +23,75 @@ const controls = new OrbitControls(camera, renderer.domElement);
 
 const clock = new THREE.Clock();
 
+const wireUpForIk = (model, specs) => {
+    const { bones } = model.skeleton;
+
+    const ikPairs = Object.entries(specs).map(([name, spec]) => {
+        const effectorBone = bones.find(bone => bone.name.includes(spec.effector));
+        const linkBones = [];
+
+        let link = effectorBone.parent;
+        while (link && !link.name?.includes(spec.base)) {
+            linkBones.push(link);
+            link = link.parent;
+        }
+        if (!link?.name?.includes(spec.base)) {
+            console.warn('Couldnt find a path from effector to base', linkBones, link);
+            return { /* ... ?? */ };
+        }
+
+        const baseBone = link;
+        const targetBone = new THREE.Bone({name: `target_${effectorBone.name}`});
+        baseBone.add(targetBone);
+
+        const makeIk = bones => ({
+            target: bones.indexOf(targetBone),
+            effector: bones.indexOf(effectorBone),
+            links: linkBones.map(bone => ({
+                index: bones.indexOf(bone),
+                rotationMin: new THREE.Vector3(-Math.PI / 2, -Math.PI / 2, -Math.PI / 2),
+                rotationMax: new THREE.Vector3(Math.PI / 2, Math.PI / 2, Math.PI / 2),
+                enabled: true
+            })),
+            iteration: 10,
+            minAngle: 0.0,
+            maxAngle: Math.PI
+        });
+
+        return [name, { targetBone, makeIk }];
+    });
+    
+    const newBones = [...bones, ...ikPairs.map(([, { targetBone }]) => targetBone)];
+    model.skeleton = new THREE.Skeleton(newBones);
+
+    const targetBones = Object.fromEntries(
+        ikPairs.map(([name, { targetBone }]) => [name, targetBone])
+    );
+
+    const iks = ikPairs.map(([, { makeIk }]) => makeIk(newBones));
+
+    return [targetBones, iks];
+};
+
+const updateWave = (targetBone, deltaTime) => {
+    const waveAmplitudeX = 20;
+    const waveAmplitudeY = 10;
+    const waveFrequency = 10;
+
+    const elapsedTime = clock.getElapsedTime();
+    const newX = 20 + waveAmplitudeX * Math.cos(waveFrequency * elapsedTime);
+    const newY = 40 + waveAmplitudeY * Math.sin(waveFrequency * elapsedTime);
+
+    targetBone.position.set(newX, newY, 0);
+};
+
 // Load humanoid model
 const loader = new GLTFLoader();
 loader.load('models/gltf/Xbot.glb', function (gltf) {
     const group = gltf.scene;
     scene.add(group);
+
+    group.position.y -= 1;
 
     let model;
     group.traverse(node => {
@@ -36,85 +100,27 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         }
     });
 
-    // Add skeleton helper
-
-    // Find bones by name
-    let bones = model.skeleton.bones;
-    const effectorBone = bones.find(bone => bone.name.includes('Hand'));
-    console.log('bones', bones.length);
-
-    const linkBones = [];
-
-    let link = effectorBone.parent;
-    while (link && !link.name?.includes('Shoulder')) {
-        linkBones.push(link);
-        link = link.parent;
-    }
-    if (!link?.name?.includes('Shoulder')) {
-        console.warn('Couldnt find a path to shoulder', linkBones, link);
-        return;
-    }
-    const baseBone = link;
-    const targetBone = new THREE.Bone({name: `target_${effectorBone.name}`});
-    baseBone.add(targetBone);
-    bones = [...bones, targetBone];
-    model.skeleton = new THREE.Skeleton(bones);
+    const [targetBones, iks] = wireUpForIk(model, {
+        leftHand: {base: 'LeftShoulder', effector: 'LeftHand'},
+        rightHand: {base: 'RightShoulder', effector: 'RightHand'},
+    });
 
     const skeleton = new SkeletonHelper(group);
     scene.add(skeleton);
 
-    let ccdikSolver;
+    const ccdikSolver = new CCDIKSolver(model, iks);
 
-    if (targetBone && effectorBone && linkBones.length > 0) {
-        // Set up CCDIKSolver
-        const iks = [
-            {
-                target: bones.indexOf(targetBone),
-                effector: bones.indexOf(effectorBone),
-                links: linkBones.map(bone => ({
-                    index: bones.indexOf(bone),
-                    limitation: undefined, // Optional: Set specific limitations if needed
-                    rotationMin: new THREE.Vector3(-Math.PI / 2, -Math.PI / 2, -Math.PI / 2),
-                    rotationMax: new THREE.Vector3(Math.PI / 2, Math.PI / 2, Math.PI / 2),
-                    enabled: true
-                })),
-                iteration: 10,
-                minAngle: 0.0,
-                maxAngle: Math.PI
-            }
-        ];
-
-        ccdikSolver = new CCDIKSolver(model, iks);
-    }
-
-    function updateIK() {
-        console.log('updateIK called');
-        if (ccdikSolver) {
-            console.log('ccdikSolver is updating');
-            ccdikSolver.update();
-        }
-    }
-
-    function updateTarget(deltaTime) {
-        const waveAmplitudeX = 5; // Amplitude of the wave motion in X
-        const waveAmplitudeY = 2; // Amplitude of the wave motion in Y
-        const waveFrequency = 1; // Frequency of the wave motion
-
-        // Calculate the new X and Y positions using sine and cosine waves
-        const elapsedTime = clock.getElapsedTime();
-        const newX = waveAmplitudeX * Math.cos(waveFrequency * elapsedTime);
-        const newY = 20 + waveAmplitudeY * Math.sin(waveFrequency * elapsedTime);
-
-        // Update the targetBone position
-        targetBone.position.set(newX, newY, -2);
+    function updateTargetBones(deltaTime) {
+        updateWave(targetBones.leftHand, deltaTime);
+        targetBones.rightHand.position.set(-25, -100, 0);
     }
 
     // Animation loop
     function animate() {
         const deltaTime = clock.getDelta();
         requestAnimationFrame(animate);
-        updateTarget(deltaTime);
-        updateIK();
+        updateTargetBones(deltaTime);
+        ccdikSolver.update();
         controls.update();
         renderer.render(scene, camera);
         
@@ -126,4 +132,4 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
 });
 
 // Set camera position
-camera.position.set(0, 1, 5);
+camera.position.set(0, 0, 5);
