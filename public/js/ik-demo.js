@@ -58,7 +58,13 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
             {
                 target: bones.indexOf(targetBone),
                 effector: bones.indexOf(effectorBone),
-                links: linkBones.map(bone => ({ index: bones.indexOf(bone) })),
+                links: linkBones.map(bone => ({
+                    index: bones.indexOf(bone),
+                    limitation: {
+                        min: new THREE.Vector3(-Math.PI / 4, -Math.PI / 4, -Math.PI / 4),
+                        max: new THREE.Vector3(Math.PI / 4, Math.PI / 4, Math.PI / 4)
+                    }
+                })),
                 iteration: 10,
                 minAngle: 0.0,
                 maxAngle: Math.PI
