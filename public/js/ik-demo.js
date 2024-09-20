@@ -40,25 +40,22 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
 
     // Find bones by name
     const bones = skeleton.bones;
-    const targetBone = bones.find(bone => bone.name.includes('Hand'));
-    const effectorBone = bones.find(bone => 
-        bone.name.includes('LowerArm') || 
-        bone.name.includes('Forearm') || 
-        bone.name.includes('Elbow') || 
-        bone.name.includes('Arm')
-    );
-    console.log('Effector Bone:', effectorBone ? effectorBone.name : 'Not found');
+    const effectorBone = bones.find(bone => bone.name.includes('Hand'));
+    console.log('Effector Bone:', effectorBone?.name || 'Not found');
+
     const linkBones = [];
-    let currentBone = effectorBone;
 
-    while (currentBone && currentBone !== targetBone) {
-        linkBones.push(currentBone);
-        currentBone = currentBone.parent;
+    let link = effectorBone.parent;
+    while (link && !link.name?.includes('Shoulder')) {
+        linkBones.push(link);
+        link = link.parent;
     }
-
-    if (currentBone !== targetBone) {
-        console.warn('Target bone is not a parent of the effector bone.');
+    if (!link?.name?.includes('Shoulder')) {
+        console.warn('Couldnt find a path to shoulder', linkBones, link);
+        return;
     }
+    const baseBone = link;
+    const targetBone = new Bone /* ??? - add a bone to base bone and point it to whatever transform we need */
 
     console.log('Target Bone:', targetBone ? targetBone.name : 'Not found');
     console.log('Effector Bone:', effectorBone ? effectorBone.name : 'Not found');
