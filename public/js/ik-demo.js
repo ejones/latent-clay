@@ -55,7 +55,9 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         return;
     }
     const baseBone = link;
-    const targetBone = new Bone /* ??? - add a bone to base bone and point it to whatever transform we need */
+    const targetBone = new THREE.Bone();
+    baseBone.add(targetBone);
+    targetBone.position.set(0, 0, 0); // Adjust the position as needed
 
     console.log('Target Bone:', targetBone ? targetBone.name : 'Not found');
     console.log('Effector Bone:', effectorBone ? effectorBone.name : 'Not found');
