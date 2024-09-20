@@ -60,6 +60,14 @@ const wireUpForIk = (model, specs) => {
 
         return [name, { targetBone, makeIk }];
     });
+
+    const [targetBones, iks] = wireUpForIk(model, {
+        leftHand: {base: 'LeftShoulder', effector: 'LeftHand'},
+        rightHand: {base: 'RightShoulder', effector: 'RightHand'},
+        head: {base: 'Spine2', effector: 'Head'},
+        leftFoot: {base: 'LeftUpLeg', effector: 'LeftFoot'},
+        rightFoot: {base: 'RightUpLeg', effector: 'RightFoot'},
+    });
     
     const newBones = [...bones, ...ikPairs.map(([, { targetBone }]) => targetBone)];
     model.skeleton = new THREE.Skeleton(newBones);
@@ -113,6 +121,37 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     function updateTargetBones(deltaTime) {
         updateWave(targetBones.leftHand, deltaTime);
         targetBones.rightHand.position.set(-25, -100, 0);
+        animateHead(targetBones, deltaTime);
+        animateArms(targetBones, deltaTime);
+        animateLegs(targetBones, deltaTime);
+    }
+
+    function animateHead(targetBones, deltaTime) {
+        const headBone = targetBones.head;
+        if (headBone) {
+            const nodFrequency = 2;
+            headBone.position.y = 0.1 * Math.sin(nodFrequency * clock.getElapsedTime());
+        }
+    }
+
+    function animateArms(targetBones, deltaTime) {
+        const leftHandBone = targetBones.leftHand;
+        const rightHandBone = targetBones.rightHand;
+        if (leftHandBone && rightHandBone) {
+            const waveFrequency = 3;
+            leftHandBone.position.z = 0.5 * Math.sin(waveFrequency * clock.getElapsedTime());
+            rightHandBone.position.z = -0.5 * Math.sin(waveFrequency * clock.getElapsedTime());
+        }
+    }
+
+    function animateLegs(targetBones, deltaTime) {
+        const leftFootBone = targetBones.leftFoot;
+        const rightFootBone = targetBones.rightFoot;
+        if (leftFootBone && rightFootBone) {
+            const walkFrequency = 2;
+            leftFootBone.position.y = 0.3 * Math.sin(walkFrequency * clock.getElapsedTime());
+            rightFootBone.position.y = -0.3 * Math.sin(walkFrequency * clock.getElapsedTime());
+        }
     }
 
     // Animation loop
