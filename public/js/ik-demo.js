@@ -48,7 +48,17 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         bone.name.includes('Arm')
     );
     console.log('Effector Bone:', effectorBone ? effectorBone.name : 'Not found');
-    const linkBones = bones.filter(bone => bone.name.includes('UpperArm') || bone.name.includes('Shoulder'));
+    const linkBones = [];
+    let currentBone = effectorBone;
+
+    while (currentBone && currentBone !== targetBone) {
+        linkBones.push(currentBone);
+        currentBone = currentBone.parent;
+    }
+
+    if (currentBone !== targetBone) {
+        console.warn('Target bone is not a parent of the effector bone.');
+    }
 
     console.log('Target Bone:', targetBone ? targetBone.name : 'Not found');
     console.log('Effector Bone:', effectorBone ? effectorBone.name : 'Not found');
