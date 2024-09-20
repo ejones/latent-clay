@@ -92,7 +92,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     // Animation loop
     function animate() {
         requestAnimationFrame(animate);
-        updateIK();
+        //updateIK();
         controls.update();
         renderer.render(scene, camera);
         
