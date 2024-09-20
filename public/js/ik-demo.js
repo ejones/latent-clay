@@ -21,6 +21,8 @@ scene.add(directionalLight);
 // Add orbit controls
 const controls = new OrbitControls(camera, renderer.domElement);
 
+const clock = new THREE.Clock();
+
 // Load humanoid model
 const loader = new GLTFLoader();
 loader.load('models/gltf/Xbot.glb', function (gltf) {
@@ -35,13 +37,11 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     });
 
     // Add skeleton helper
-    const skeleton = new SkeletonHelper(group);
-    scene.add(skeleton);
 
     // Find bones by name
-    const bones = skeleton.bones;
+    let bones = model.skeleton.bones;
     const effectorBone = bones.find(bone => bone.name.includes('Hand'));
-    console.log('Effector Bone:', effectorBone?.name || 'Not found');
+    console.log('bones', bones.length);
 
     const linkBones = [];
 
@@ -55,18 +55,15 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         return;
     }
     const baseBone = link;
-    const targetBone = new THREE.Bone();
+    const targetBone = new THREE.Bone({name: `target_${effectorBone.name}`});
     baseBone.add(targetBone);
-    targetBone.position.set(0, 0, 5); // Position the target bone 5 units in front of the base bone
+    bones = [...bones, targetBone];
+    model.skeleton = new THREE.Skeleton(bones);
 
-    console.log('Target Bone:', targetBone ? targetBone.name : 'Not found');
-    console.log('Effector Bone:', effectorBone ? effectorBone.name : 'Not found');
-    console.log('Link Bones:', linkBones.map(bone => bone.name));
+    const skeleton = new SkeletonHelper(group);
+    scene.add(skeleton);
 
     let ccdikSolver;
-
-    console.log(bones);
-    console.log(model.skeleton.bones);
 
     if (targetBone && effectorBone && linkBones.length > 0) {
         // Set up CCDIKSolver
@@ -74,7 +71,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
             {
                 target: bones.indexOf(targetBone),
                 effector: bones.indexOf(effectorBone),
-                links: linkBones.reverse().map(bone => ({
+                links: linkBones.map(bone => ({
                     index: bones.indexOf(bone),
                     limitation: undefined, // Optional: Set specific limitations if needed
                     rotationMin: new THREE.Vector3(-Math.PI / 2, -Math.PI / 2, -Math.PI / 2),
@@ -98,10 +95,17 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         }
     }
 
+    function updateTarget(deltaTime) {
+        // TODO: use deltaTime to animate this in a Y arc - for a "waving" motion
+        targetBone.position.set(0, 20, -2);
+    }
+
     // Animation loop
     function animate() {
+        const deltaTime = clock.getDelta();
         requestAnimationFrame(animate);
-        //updateIK();
+        updateTarget(deltaTime);
+        updateIK();
         controls.update();
         renderer.render(scene, camera);
         
