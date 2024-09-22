@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SkeletonHelper } from 'three';
 import { CCDIKSolver } from 'three/addons/animation/CCDIKSolver.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
 // Initialize scene, camera, and renderer
 const scene = new THREE.Scene();
@@ -18,8 +19,17 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
 directionalLight.position.set(1, 1, 1).normalize();
 scene.add(directionalLight);
 
+
 // Add orbit controls
 const controls = new OrbitControls(camera, renderer.domElement);
+
+const settings = Object.fromEntries(
+    ['Left', 'Right'].flatMap(lr =>
+        ['Arm', 'ForeArm'].map(name =>
+            [`${lr}${name}`, {x: 0, y: 0, z: 0}]
+        )
+    )
+);
 
 const clock = new THREE.Clock();
 
@@ -63,7 +73,17 @@ class BoneTarget {
       }
 }
 
-const wireUpForIk = (model, specs) => {
+const createPanel = () => {
+    const gui = new GUI();
+    for (const key in settings) {
+        const folder = gui.addFolder(key);
+        for (const ax of 'xyz') {
+            folder.add(settings[key], ax, -1, 1);
+        }
+    }
+};
+
+const wireUpForIk = (model, specs, rotationConstraints) => {
     const { bones } = model.skeleton;
 
     const ikPairs = Object.entries(specs).map(([name, spec]) => {
@@ -76,7 +96,7 @@ const wireUpForIk = (model, specs) => {
         while (link && !link.name?.includes(spec.base)) {
             linkBones.push(link);
             targetPos.add(link.position);
-            console.log('add', link.name, link.position.x, link.position.y, link.position.z);
+            link.rotation.order = 'YZX'; // rotation constraints depend on this
             link = link.parent;
         }
         if (!link?.name?.includes(spec.base)) {
@@ -92,12 +112,32 @@ const wireUpForIk = (model, specs) => {
         const makeIk = bones => ({
             target: bones.indexOf(targetBone),
             effector: bones.indexOf(effectorBone),
-            links: linkBones.map(bone => ({
-                index: bones.indexOf(bone),
-                rotationMin: new THREE.Vector3(-Math.PI / 2, -Math.PI / 2, -Math.PI / 2),
-                rotationMax: new THREE.Vector3(Math.PI / 2, Math.PI / 2, Math.PI / 2),
-                enabled: true
-            })),
+            links: linkBones.map(bone => {
+                let constraints;
+                for (const key in rotationConstraints) {
+                    if (bone.name.includes(key)) {
+                        constraints = rotationConstraints[key];
+                        break;
+                    }
+                }
+
+                let ikConstraints;
+                if (constraints) {
+                    const [[xMin, xMax], [yMin, yMax], [zMin, zMax]] = constraints;
+                    ikConstraints = {
+                        rotationMin: new THREE.Vector3(xMin * Math.PI, yMin * Math.PI, zMin * Math.PI),
+                        rotationMax: new THREE.Vector3(xMax * Math.PI, yMax * Math.PI, zMax * Math.PI),
+                    };
+                } else {
+                    console.warn(`Couldn't find rotation constraints for ${bone.name}`);
+                    ikConstraints = {};
+                }
+
+                return {
+                    index: bones.indexOf(bone),
+                    ...ikConstraints,
+                };
+            }),
             iteration: 10,
             minAngle: 0.0,
             maxAngle: Math.PI
@@ -107,7 +147,9 @@ const wireUpForIk = (model, specs) => {
     });
     
     const newBones = [...bones, ...ikPairs.map(([, { targetBone }]) => targetBone)];
-    model.skeleton = new THREE.Skeleton(newBones);
+    console.log(model.skeleton);
+    model.bind(new THREE.Skeleton(newBones));
+    console.log(model.skeleton);
 
     const targetBones = Object.fromEntries(
         ikPairs.map(([name, { targetBone, effectorBone }]) =>
@@ -133,11 +175,16 @@ const updateWave = (targetBone) => {
 };
 
 function animateClap({leftHand, rightHand}) {
-    const waveFrequency = 10;
+    const waveFrequency = 18;
     const elapsedTime = clock.getElapsedTime();
-    const xPos = 15 * (1.1 + Math.sin(waveFrequency * elapsedTime));
-    leftHand.setModelRelative(xPos, 'Spine1', 50);
-    rightHand.setModelRelative(-xPos, 'Spine1', 50);
+    const sine = Math.sin(waveFrequency * elapsedTime)
+    const xPos = 9 * (1.1 + sine);
+    leftHand.setModelRelative(xPos, 'Spine1', 24);
+    leftHand.effector.rotation.x = -Math.PI / 3;
+    leftHand.effector.rotation.z = Math.PI / 12 * (1 - sine);
+    rightHand.setModelRelative(-xPos, 'Spine1', 24);
+    rightHand.effector.rotation.x = -Math.PI / 3;
+    rightHand.effector.rotation.z = -Math.PI / 12 * (1 - sine);
 }
 
 /*
@@ -182,31 +229,74 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     const [targetBones, iks] = wireUpForIk(model, {
         leftHand: {base: 'Shoulder', effector: 'LeftHand'},
         rightHand: {base: 'Shoulder', effector: 'RightHand'},
-        head: {base: 'Spine', effector: 'Head'},
-        leftFoot: {base: 'Hips', effector: 'LeftFoot'},
-        rightFoot: {base: 'Hips', effector: 'RightFoot'},
+        //head: {base: 'Spine', effector: 'Head'},
+        //leftFoot: {base: 'Hips', effector: 'LeftFoot'},
+        //rightFoot: {base: 'Hips', effector: 'RightFoot'},
+    }, {
+        LeftArm: [
+            [-0.37, 0.41],
+            [-0.65, 0.12],
+            [-0.45, -0.4], // [-0.45, 0.45],
+        ],
+        LeftForeArm: [
+            [-0.5, 0.4],
+            [-0.84, 0],
+            [0, 0],
+        ],
+        RightArm: [
+            [-0.37, 0.41],
+            [-0.12, 0.65],
+            [0.4, 0.45], //[-0.45, 0.45],
+        ],
+        RightForeArm: [
+            [-0.5, 0.4],
+            [0, 0.84],
+            [0, 0],
+        ],
     });
 
     const skeleton = new SkeletonHelper(group);
     scene.add(skeleton);
 
+    /*
     targetBones.leftHand.effector.rotateX(Math.PI);
     targetBones.rightHand.effector.rotateX(Math.PI);
+    */
 
     const ccdikSolver = new CCDIKSolver(model, iks);
+
+    model.skeleton.bones.find(({name}) => name.includes('LeftArm')).rotateZ(-0.44 * Math.PI);
+    model.skeleton.bones.find(({name}) => name.includes('LeftForeArm')).rotateX(-0.4 * Math.PI);
+    model.skeleton.bones.find(({name}) => name.includes('RightArm')).rotateZ(0.44 * Math.PI);
+    model.skeleton.bones.find(({name}) => name.includes('RightForeArm')).rotateX(-0.4 * Math.PI);
 
     function updateTargetBones() {
         //updateWave(targetBones.leftHand);
         //animateHead(targetBones);
         animateClap(targetBones);
         //animateLegs(targetBones);
+        ccdikSolver.update();
+    }
+    
+    function updateBonesFromSettings() {
+        for (const key in settings) {
+            const bone = model.skeleton.bones.find(({name}) => name.includes(key));
+            if (!bone) {
+                console.warn(`No bone for settings key: ${key}!`);
+                continue;
+            }
+            const {x, y, z} = settings[key];
+            bone.rotation.set(x * Math.PI, y * Math.PI, z * Math.PI, 'YZX');
+        }
     }
 
+    //createPanel();
+
     // Animation loop
-    function animate() {
+    async function animate() {
         requestAnimationFrame(animate);
         updateTargetBones();
-        ccdikSolver.update();
+        //updateBonesFromSettings();
         controls.update();
         renderer.render(scene, camera);
         
