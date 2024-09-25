@@ -24,11 +24,10 @@ scene.add(directionalLight);
 const controls = new OrbitControls(camera, renderer.domElement);
 
 const settings = Object.fromEntries(
-    ['Left', 'Right'].flatMap(lr =>
-        ['Arm', 'ForeArm', 'Hand'].map(name =>
-            [`${lr}${name}`, {x: 0, y: 0, z: 0}]
-        )
-    )
+    ['Left', 'Right'].flatMap(lr => [
+        [`${lr}ForeArm`, {x: 0}],
+        [`${lr}Hand`, {z: 0}],
+    ])
 );
 
 const clock = new THREE.Clock();
@@ -50,6 +49,7 @@ class BoneTarget {
           );
 
           this._vec = new THREE.Vector3();
+          this._vec2 = new THREE.Vector3();
       }
 
       setModelRelative(x, y, z) {
@@ -66,10 +66,79 @@ class BoneTarget {
               }
               this._vec.set(x, y, z);
           }
+          this.model.localToWorld(this._vec);
+          this.bone.parent.worldToLocal(this._vec);
+          /*
           for (let p = this.bone.parent; p && p !== this.model; p = p.parent) {
               this._vec.sub(p.position);
           }
+          */
           this.bone.position.copy(this._vec);
+      }
+
+      setNormal(x, y, z) {
+          //this._mat.makeTranslation(0, -1, 0);
+          /*
+          for (let p = this.effector; p && p !== this.model; p = p.parent) {
+              this._mat.premultiply(p.matrix);
+          }
+          console.log(this._mat);
+          */
+          //this._mat.premultiply(this.effector.matrixWorld);
+          /*
+          this._vec.set(0, -100, 0);
+          this.effector.localToWorld(this._vec);
+          this.model.worldToLocal(this._vec);
+          this._vec2.set(0, 0, 0);
+          this.effector.localToWorld(this._vec2);
+          this.model.worldToLocal(this._vec2);
+          this._vec.sub(this._vec2).normalize();
+          */
+          // TODO avoid resetting this at the beginning
+
+          this.effector.rotation.x = 0;
+          this.effector.rotation.z = 0;
+
+          this._vec.copy(this.effector.position);
+          this.effector.parent.localToWorld(this._vec);
+          this.model.worldToLocal(this._vec);
+
+          this._vec2.set(x, y, z);
+          this._vec.add(this._vec2);
+          this.model.localToWorld(this._vec);
+          this.effector.worldToLocal(this._vec);
+
+
+
+          this._vec2.copy(this._vec);
+          this._vec2.x = 0;
+          this._vec2.normalize();
+
+
+          let vx = 0;
+          let {z: vz, y: vy} = this._vec2;
+
+          const [nx, ny, nz] = [0, -1, 0];
+          //const rx = Math.acos(nz * vz + ny * vy);
+          const rx = Math.atan2( vz * ny - vy * nz, vz * nz + vy * ny );
+
+          this._vec2.set(-1, 0, 0);
+          this._vec.applyAxisAngle(this._vec2, rx);
+
+          this._vec2.copy(this._vec);
+          this._vec2.z = 0;
+          this._vec2.normalize();
+
+          ({x: vx, y: vy} = this._vec2);
+
+          const rz = Math.atan2( nx * vy - ny * vx, vx * nx + vy * ny );
+
+          //console.log(this._vec, rx / Math.PI, rz / Math.PI);
+          // TODO: use link bone for one of the rotations as needed, per config
+          //console.log(rx / Math.PI, rz / Math.PI);
+
+          this.effector.rotation.x = rx;
+          this.effector.rotation.z = rz;
       }
 }
 
@@ -77,8 +146,8 @@ const createPanel = () => {
     const gui = new GUI();
     for (const key in settings) {
         const folder = gui.addFolder(key);
-        for (const ax of 'xyz') {
-            folder.add(settings[key], ax, -1, 1);
+        for (const axKey in settings[key]) {
+            folder.add(settings[key], axKey, -1, 1);
         }
     }
 };
@@ -89,13 +158,13 @@ const wireUpForIk = (model, specs, rotationConstraints) => {
     const ikPairs = Object.entries(specs).map(([name, spec]) => {
         const effectorBone = bones.find(bone => bone.name.endsWith(spec.effector));
         const linkBones = [];
-        const targetPos = new THREE.Vector3();
-        targetPos.copy(effectorBone.position);
+        //const targetPos = new THREE.Vector3();
+        //targetPos.copy(effectorBone.position);
 
         let link = effectorBone.parent;
         while (link && !link.name?.endsWith(spec.base)) {
             linkBones.push(link);
-            targetPos.add(link.position);
+            //targetPos.add(link.position);
             link.rotation.order = 'YZX'; // rotation constraints depend on this
             link = link.parent;
         }
@@ -106,7 +175,7 @@ const wireUpForIk = (model, specs, rotationConstraints) => {
 
         const baseBone = link;
         const targetBone = new THREE.Bone({name: `target_${effectorBone.name}`});
-        targetBone.position.copy(targetPos);
+        //targetBone.position.copy(targetPos);
         baseBone.add(targetBone);
 
         const makeIk = bones => ({
@@ -163,47 +232,54 @@ const wireUpForIk = (model, specs, rotationConstraints) => {
     return [targetBones, iks];
 };
 
-const updateWave = (targetBone) => {
-    const waveAmplitudeX = 20;
-    const waveAmplitudeY = 10;
-    const waveFrequency = 10;
+function animateThrow(mgr, elapsedTime) {
+    const sine = Math.min(Math.max(0, ((elapsedTime - 0.7) % 2) ** 2 / 0.1), 2) - 1;
+    const zPos = 30 * (1 + sine);
+    const yPos = 35 * (1 + sine);
+    mgr.rightHand.setModelRelative(-30, 84, 0);
+    mgr.leftHand.setModelRelative(25, 170 - yPos, zPos);
+    mgr.leftHand.setNormal(0, 0.2 - 0.4 * (1 + sine), 1 - 0.8 * (1 + sine));
 
-    const elapsedTime = clock.getElapsedTime();
-    const newX = 20 + waveAmplitudeX * Math.cos(waveFrequency * elapsedTime);
-    const newY = 40 + waveAmplitudeY * Math.sin(waveFrequency * elapsedTime);
+    //mgr.rightHandPerp.setModelRelative(-19, 84, 0);
+    //mgr.leftHandPerp.setModelRelative(20, 170 - 1.2 * yPos, 0.8 * zPos + 10 - 5 * (1 + sine))
+}
 
-    targetBone.position.set(newX, newY, 0);
-};
-
-function animateClap(mgr) {
+function animateClap(mgr, elapsedTime) {
     const waveFrequency = 18;
-    const elapsedTime = clock.getElapsedTime();
     const sine = Math.sin(waveFrequency * elapsedTime)
     const xPos = 10 * (1 + sine) + 2;
     mgr.leftHand.setModelRelative(xPos, 'Spine1', 30);
-    mgr.leftHandPerp.setModelRelative(xPos - 8, 'Spine1', 36);
+    mgr.leftHand.setNormal(-1, 0, 0);
     mgr.rightHand.setModelRelative(-xPos, 'Spine1', 30);
-    mgr.rightHandPerp.setModelRelative(-xPos + 8, 'Spine1', 36);
+    mgr.rightHand.setNormal(1, 0, 0);
+    
+
+
+    //mgr.leftHand.effector.rotation.z = 0.15 * Math.PI;
+    //mgr.leftHand.effector.rotation.x = 0.3 * Math.PI;
+    //mgr.leftHandPerp.setModelRelative(xPos - 8, 'Spine1', 36);
+    //mgr.rightHand.setNormal(1, 0, 0);
+    //mgr.rightHand.effector.rotation.x = 0.5 * Math.PI;
+    //mgr.rightHand.effector.rotation.z = -0.1 * Math.PI;
+    //mgr.rightHandPerp.setModelRelative(-xPos + 8, 'Spine1', 36);
 }
 
 /*
 TODO adapt to new BoneTarget
-function animateHead(targetBones) {
+function animateHead(targetBones, elapsedTime) {
     const headBone = targetBones.head;
     if (headBone) {
         const nodFrequency = 5;
-        const elapsedTime = clock.getElapsedTime();
         headBone.position.z = 5 + 5 * Math.sin(nodFrequency * elapsedTime);
     }
 }
 
 
-function animateLegs(targetBones) {
+function animateLegs(targetBones, elapsedTime) {
     const leftFootBone = targetBones.leftFoot;
     const rightFootBone = targetBones.rightFoot;
     if (leftFootBone && rightFootBone) {
         const walkFrequency = 10;
-        const elapsedTime = clock.getElapsedTime();
         leftFootBone.position.z = 18 * Math.sin(walkFrequency * elapsedTime);
         rightFootBone.position.z = -18 * Math.sin(walkFrequency * elapsedTime);
     }
@@ -225,6 +301,9 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         }
     });
 
+    console.log(...model.skeleton.bones.map(({name}) => name));
+
+    /*
     const handPerps = [];
     for (const lr of ['Left', 'Right']) {
         const handBone = model.skeleton.bones.find(({name}) => name.endsWith(`${lr}Hand`));
@@ -236,13 +315,14 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     }
 
     model.bind(new THREE.Skeleton([...model.skeleton.bones, ...handPerps]));
+    */
 
     const [targetBones, iks] = wireUpForIk(model, {
         leftHand: {base: 'Shoulder', effector: 'LeftHand'},
-        leftHandPerp: {base: 'Shoulder', effector: 'LeftHandPerp'},
+        //leftHandPerp: {base: 'Shoulder', effector: 'LeftHandPerp'},
 
         rightHand: {base: 'Shoulder', effector: 'RightHand'},
-        rightHandPerp: {base: 'Shoulder', effector: 'RightHandPerp'},
+        //rightHandPerp: {base: 'Shoulder', effector: 'RightHandPerp'},
 
         //head: {base: 'Spine', effector: 'Head'},
         //leftFoot: {base: 'Hips', effector: 'LeftFoot'},
@@ -250,11 +330,13 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     }, {
         LeftArm: [
             [-0.37, 0.41],
+            //[0.4, .41], // throw
+
             [-0.65, 0.12],
 
 
-            [-.45, -.4],
-            //[-0.45, 0.45],
+            //[-.45, -.4], // "arms at sides"
+            [-0.45, 0.45],
         ],
         LeftForeArm: [
             [-0.5, 0.4],
@@ -270,8 +352,8 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
             [-0.37, 0.41],
             [-0.12, 0.65],
 
-            [.4, .45],
-            //[-0.45, 0.45],
+            //[.4, .45], // "arms at sides"
+            [-0.45, 0.45],
         ],
         RightForeArm: [
             [-0.5, 0.4],
@@ -302,11 +384,11 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     model.skeleton.bones.find(({name}) => name.includes('RightForeArm')).rotateX(-0.4 * Math.PI);
     */
 
-    function updateTargetBones() {
-        //updateWave(targetBones.leftHand);
-        //animateHead(targetBones);
-        animateClap(targetBones);
-        //animateLegs(targetBones);
+    function updateTargetBones(elapsedTime) {
+        //animateHead(targetBones, elapsedTime);
+        animateThrow(targetBones, elapsedTime);
+        //animateClap(targetBones, elapsedTime);
+        //animateLegs(targetBones, elapsedTime);
         ccdikSolver.update();
     }
     
@@ -317,7 +399,8 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
                 console.warn(`No bone for settings key: ${key}!`);
                 continue;
             }
-            const {x, y, z} = settings[key];
+            const rot = bone.rotation;
+            const {x = rot.x / Math.PI, y = rot.y / Math.PI, z = rot.z / Math.PI} = settings[key];
             bone.rotation.set(x * Math.PI, y * Math.PI, z * Math.PI, 'YZX');
         }
     }
@@ -327,8 +410,12 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     // Animation loop
     async function animate() {
         requestAnimationFrame(animate);
-        updateTargetBones();
-        //updateBonesFromSettings();
+        const elapsedTime = clock.getElapsedTime();
+
+        updateTargetBones(elapsedTime);
+        //if (elapsedTime < .3) updateTargetBones(elapsedTime);
+        // updateBonesFromSettings();
+
         controls.update();
         renderer.render(scene, camera);
         
