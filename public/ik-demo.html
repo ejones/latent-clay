@@ -7,6 +7,23 @@
     <style>
         body { margin: 0; }
         canvas { display: block; }
+        .ai-msg {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            right: 50%;
+            background: rgba(0 0 0 / 0.4);
+            color: white;
+            font-family: monospace;
+            padding: 20px;
+            white-space: pre-wrap;
+        }
+        .ai-msg-item {
+            transition: 1s all;
+        }
+        .hidden {
+            opacity: 0;
+        }
     </style>
 </head>
 <body>
@@ -19,5 +36,6 @@
       }
     </script>
     <script type="module" src="js/ik-demo.js"></script>
+    <div class="ai-msg"></div>
 </body>
 </html>

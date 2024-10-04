@@ -7,10 +7,117 @@ import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
 // Initialize scene, camera, and renderer
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(75, (window.innerWidth / 2) / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(window.innerWidth / 2, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
+const textarea = document.createElement('textarea');
+Object.assign(textarea.style, {
+  boxSizing: 'border-box',
+  background: '#222',
+  padding: '30px 20px',
+  color: 'white',
+  fontFamily: 'monospace',
+  fontSize: '18px',
+  height: '100vh',
+  width: `${window.innerWidth / 2}px`,
+  position: 'absolute',
+  top: 0,
+  right: 0,
+  outline: 'none',
+  border: '0 none',
+});
+textarea.value = `left-hand {
+  transition: 0.2s all;
+  position: eye left front at body;
+  direction: down slightly right;
+}`;
+document.body.appendChild(textarea);
+
+const chatbox = document.createElement('textarea');
+Object.assign(chatbox.style, {
+  position: 'absolute',
+  height: '40px',
+  bottom: 0,
+  right: '50%',
+  left: 0,
+  color: 'white',
+  background: 'rgba(0 0 0 / 0.4)',
+  border: '0 none',
+  outline: 'none',
+  boxSizing: 'border-box',
+  padding: '10px',
+  resize: 'none',
+  overflow: 'hidden',
+});
+chatbox.value = '> '; // TODO: do as element not text
+document.body.appendChild(chatbox);
+
+textarea.onkeydown = e => {
+    if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
+        let {value, selectionStart: start, selectionEnd: end} = e.target;
+        while (/[0-9]/.test(value[start - 1])) {
+          start -= 1;
+        }
+        while (/[0-9]/.test(value[end])) {
+          end += 1;
+        }
+        const num = end > start ? Number(value.slice(start, end)) : NaN;
+        if (Number.isFinite(num)) {
+            e.preventDefault();
+            let delta  = e.code === 'ArrowDown' ? -1 : 1;
+            if (e.shiftKey) {
+              delta *= 10;
+            }
+            e.target.value = `${value.slice(0, start)}${num + delta}${value.slice(end)}`;
+            e.target.selectionStart = start;
+            e.target.selectionEnd = end;
+        }
+    }
+};
+
+chatbox.onkeyup = async e => {
+    if (e.code === 'Enter') {
+        const msg = e.target.value.slice(2); // for "> "
+        e.target.value = '> ';
+        const response = await fetch('/', {method:'POST', body: msg})
+        if (!response.ok) {
+            throw new Error('bad response!');
+        }
+        const aiMsg = document.querySelector('.ai-msg');
+        const aiMsgItem = document.createElement('div');
+        aiMsgItem.className = 'ai-msg-item';
+        aiMsg.appendChild(aiMsgItem);
+        let inCode = false;
+        const addChunk = (s) => {
+            if (inCode) {
+                textarea.value += s;
+            } else {
+                aiMsgItem.textContent += s;
+            }
+        };
+        for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
+            const parts = chunk.split('```');
+            console.log(parts);
+            addChunk(parts[0]);
+            if (parts.length > 1) {
+                if (!inCode) {
+                    textarea.value = '';
+                }
+                inCode = !inCode;
+                addChunk(parts[1]);
+            }
+        }
+        setTimeout(() => {
+            aiMsgItem.className += ' hidden';
+            setTimeout(() => {
+                aiMsgItem.remove();
+            }, 2000);
+        }, 2400);
+    }
+};
+
 
 const ambientLight = new THREE.AmbientLight(0x404040); // soft white light
 scene.add(ambientLight);
@@ -33,23 +140,50 @@ const settings = Object.fromEntries(
 const clock = new THREE.Clock();
 
 class BoneTarget {
-      constructor(model, bone, effector) {
+      constructor(model, bone, links, effector) {
           this.model = model;
           this.bone = bone;
+          this.links = links;
           this.effector = effector;
 
-          this._positionMap = new Map(
-              model.skeleton.bones.map(bone => {
+          this.positionMap = new Map(
+              model.skeleton.bones.flatMap(bone => {
                   const vec = new THREE.Vector3();
                   for (let p = bone; p && p !== this.model; p = p.parent) {
                       vec.add(p.position);
                   }
-                  return [bone.name, vec];
+                  let key = bone.name.toLowerCase();
+                  if (key.startsWith('mixamorig')) {
+                      key = key.slice(9);
+                  }
+                  const entries = [];
+                  if (key === 'spine2') {
+                      entries.push(['chest', vec]);
+                  } else if (key === 'spine1') {
+                      entries.push(['midtorso', vec]);
+                  } else if (key === 'spine') {
+                      entries.push(['stomach', vec]);
+                  }
+                  if (key.startsWith('left')) {
+                      entries.push([key.slice(4), vec]);
+                  }
+                  if (key === 'hips') {
+                      entries.push(['hip', vec]);
+                  }
+                  return entries;
               })
           );
+          const maxY = Math.max(...[...this.positionMap.values()].map(({y}) => y));
+          this.positionMap.set('abovehead', new THREE.Vector3(0, maxY + 10, 0));
 
           this._vec = new THREE.Vector3();
           this._vec2 = new THREE.Vector3();
+      }
+      
+      reset() {
+          for (const bone of this.links) {
+              bone.rotation.set(0, 0, 0);
+          }
       }
 
       setModelRelative(x, y, z) {
@@ -57,7 +191,7 @@ class BoneTarget {
               this._vec.copy(x); // x is Vector3
           } else {
               if (typeof y === 'string') {
-                  for (const [k, v] of this._positionMap) {
+                  for (const [k, v] of this.positionMap) {
                       if (k.endsWith(y)) {
                           y = v.y;
                           break;
@@ -215,15 +349,15 @@ const wireUpForIk = (model, specs, rotationConstraints) => {
             maxAngle: Math.PI
         });
 
-        return [name, { targetBone, makeIk, effectorBone }];
+        return [name, { targetBone, linkBones, makeIk, effectorBone }];
     });
     
     const newBones = [...bones, ...ikPairs.map(([, { targetBone }]) => targetBone)];
     model.bind(new THREE.Skeleton(newBones));
 
     const targetBones = Object.fromEntries(
-        ikPairs.map(([name, { targetBone, effectorBone }]) =>
-            [name, new BoneTarget(model, targetBone, effectorBone)]
+        ikPairs.map(([name, { targetBone, linkBones, effectorBone }]) =>
+            [name, new BoneTarget(model, targetBone, linkBones, effectorBone)]
         )
     );
 
@@ -292,7 +426,8 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     const group = gltf.scene;
     scene.add(group);
 
-    group.position.y -= 1;
+    group.scale.set(3.2, 3.2, 3.2);
+    group.position.y -= 3.2;
 
     let model;
     group.traverse(node => {
@@ -301,7 +436,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         }
     });
 
-    console.log(...model.skeleton.bones.map(({name}) => name));
+    //console.log(...model.skeleton.bones.map(({name}) => name));
 
     /*
     const handPerps = [];
@@ -368,7 +503,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     });
 
     const skeleton = new SkeletonHelper(group);
-    scene.add(skeleton);
+    //scene.add(skeleton);
 
     /*
     targetBones.leftHand.effector.rotateX(Math.PI);
@@ -386,8 +521,8 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
 
     function updateTargetBones(elapsedTime) {
         //animateHead(targetBones, elapsedTime);
-        animateThrow(targetBones, elapsedTime);
-        //animateClap(targetBones, elapsedTime);
+        //animateThrow(targetBones, elapsedTime);
+        animateClap(targetBones, elapsedTime);
         //animateLegs(targetBones, elapsedTime);
         ccdikSolver.update();
     }
@@ -405,6 +540,72 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         }
     }
 
+    let startTime = 0;
+    let targetValues = [0, 0, 0, 0, 0, 0];
+    let currentValues = targetValues;
+    let startValues = targetValues;
+
+    const boneKeywords = [...targetBones.leftHand.positionMap.keys()]
+    boneKeywords.sort((a, b) => b.length - a.length);
+    console.log(boneKeywords);
+    const xzVec = new THREE.Vector2();
+
+    function updateBonesFromText(elapsedTime) {
+        if (elapsedTime < .33) {
+          targetBones.rightHand.setModelRelative(-40, 50, 0);
+          targetBones.leftHand.setModelRelative(40, 50, 0);
+          ccdikSolver.update();
+          return;
+        }
+
+        const match = textarea.value.match(
+          /^\s*left-hand\s*\{\s*transition:[^;]+;\s*position:\s*([a-z]+(?:\s+[a-z]+)*)\s*;\s*direction:\s*((?:up|left|slightly|right|down|out|in)(?:\s+(?:up|left|right|down|out|slightly|in))*)/);
+
+        if (match) {
+            let [, poss, dirs] = match;
+            poss = ` ${poss} `;
+            const yKwd = boneKeywords.find(kw => poss.includes(kw));
+            if (yKwd) {
+              const radialDist = poss.includes('slightly extended')
+                ? 40
+                : poss.includes('extended')
+                ? 80
+                : 25;
+              const xDir = 
+                poss.includes(' slightly left ') ? 0.5 : poss.includes(' slightly right ') ? -0.5 :
+                poss.includes(' left ') ? 1 : poss.includes(' right ') ? -1 : 0;
+              const zDir =
+                poss.includes(' slightly front ') ? 0.5 : poss.includes(' slightly back ') ? -0.5 :
+                poss.includes(' front ') ? 1 : poss.includes(' back ') ? -1 : 0;
+              xzVec.set(xDir, zDir).setLength(radialDist);
+              
+              const newTargetValues = [
+                xzVec.x,
+                targetBones.leftHand.positionMap.get(yKwd).y,
+                xzVec.y,
+
+                dirs.includes('slightly left') ? 0.5 : dirs.includes('slightly right') ? -0.5 : dirs.includes('left') ? 1 : dirs.includes('right') ? -1 : 0,
+                dirs.includes('slightly up') ? 0.5 : dirs.includes('slightly down') ? -0.5 : dirs.includes('up') ? 1 : dirs.includes('down') ? -1 : 0,
+                dirs.includes('slightly out') ? 0.5 : dirs.includes('slightly in') ? -0.5 : dirs.includes('out') ? 1 : dirs.includes('in') ? -1 : 0,
+              ];
+              const transitionDuration = 0.3;
+              const transitionTimingFunction = p => p;
+              if (newTargetValues.some((v, i) => v !== targetValues[i])) {
+                  targetValues = newTargetValues;
+                  startValues = currentValues;
+                  startTime = elapsedTime;
+              }
+              const p = transitionTimingFunction(
+                  Math.min((elapsedTime - startTime) / transitionDuration, 1)
+              );
+              currentValues = targetValues.map((tgt, i) => startValues[i] * (1 - p) + tgt * p);
+              targetBones.leftHand.setModelRelative(...currentValues.slice(0, 3));
+              ccdikSolver.update();
+              targetBones.leftHand.setNormal(...currentValues.slice(3));
+            }
+        }
+    }
+
     //createPanel();
 
     // Animation loop
@@ -412,7 +613,11 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         requestAnimationFrame(animate);
         const elapsedTime = clock.getElapsedTime();
 
-        updateTargetBones(elapsedTime);
+        
+        updateBonesFromText(elapsedTime);
+
+
+        //updateTargetBones(elapsedTime);
         //if (elapsedTime < .3) updateTargetBones(elapsedTime);
         // updateBonesFromSettings();
 
