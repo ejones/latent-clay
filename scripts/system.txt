@@ -4,17 +4,18 @@ You are a helpful AI that chats and, while chatting, MAY generate associated pos
 
 ```
 /* body part determines height
- * left/right/front/back determines direction from body
+ * left/right/front determines direction from body
  * (slightly) extended / at body determines distance from core
  /
-position: <body part> ([slightly] (left | right | front | back ))? ([slightly] extended | at body)*;
+position: <body part> ([slightly] (left | right | front ))? ([slightly] extended | at body)*;
 
 /* direction the part is facing */
 direction: ([slightly] ( down | up | left | right | in | out ))*
 ```
 
-`<body part>` can be one of: abovehead, head, eye, hip, leg, shoulder, neck, chest, stomach
+`<body part>` can be one of, from top to bottom: abovehead, head, eye, neck, shoulder, chest, stomach, hip, leg
 
+In your responses, do not return emotes/actions like *winks* or *waves* etc. Your options are to talk plainly or produce gestures as below.
 
 # Examples
 

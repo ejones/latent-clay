@@ -5,6 +5,8 @@ import { CCDIKSolver } from 'three/addons/animation/CCDIKSolver.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
+window.THREE = THREE; // DEBUG
+
 // Initialize scene, camera, and renderer
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, (window.innerWidth / 2) / window.innerHeight, 0.1, 1000);
@@ -30,15 +32,16 @@ Object.assign(textarea.style, {
 });
 textarea.value = `left-hand {
   transition: 0.2s all;
-  position: eye left front at body;
+  position: head left front at body;
   direction: down slightly right;
 }`;
+// TODO eye
 document.body.appendChild(textarea);
 
 const chatbox = document.createElement('textarea');
 Object.assign(chatbox.style, {
   position: 'absolute',
-  height: '40px',
+  height: '50px',
   bottom: 0,
   right: '50%',
   left: 0,
@@ -47,9 +50,10 @@ Object.assign(chatbox.style, {
   border: '0 none',
   outline: 'none',
   boxSizing: 'border-box',
-  padding: '10px',
+  padding: '14px',
   resize: 'none',
   overflow: 'hidden',
+  fontSize: '16px',
 });
 chatbox.value = '> '; // TODO: do as element not text
 document.body.appendChild(chatbox);
@@ -92,14 +96,15 @@ chatbox.onkeyup = async e => {
         let inCode = false;
         const addChunk = (s) => {
             if (inCode) {
-                textarea.value += s;
+                textarea.value += s.replace('{', '{\n  transition: 0.2s all;');
             } else {
                 aiMsgItem.textContent += s;
             }
         };
-        for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
+        let chunk = '';
+        const processChunk = () => {
             const parts = chunk.split('```');
-            console.log(parts);
+            chunk = '';
             addChunk(parts[0]);
             if (parts.length > 1) {
                 if (!inCode) {
@@ -108,7 +113,14 @@ chatbox.onkeyup = async e => {
                 inCode = !inCode;
                 addChunk(parts[1]);
             }
+        };
+        for await (const subChunk of response.body.pipeThrough(new TextDecoderStream())) {
+            chunk += subChunk;
+            if (!subChunk.includes('`')) {
+                processChunk();
+            }
         }
+        processChunk();
         setTimeout(() => {
             aiMsgItem.className += ' hidden';
             setTimeout(() => {
@@ -119,10 +131,10 @@ chatbox.onkeyup = async e => {
 };
 
 
-const ambientLight = new THREE.AmbientLight(0x404040); // soft white light
+const ambientLight = new THREE.AmbientLight(0xa0a0a0);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
 directionalLight.position.set(1, 1, 1).normalize();
 scene.add(directionalLight);
 
@@ -132,12 +144,57 @@ const controls = new OrbitControls(camera, renderer.domElement);
 
 const settings = Object.fromEntries(
     ['Left', 'Right'].flatMap(lr => [
-        [`${lr}ForeArm`, {x: 0}],
-        [`${lr}Hand`, {z: 0}],
+        [`${lr}Arm`, {x: 0, y: 0, z: 0}],
+        [`${lr}ForeArm`, {x: 0, y: 0, z: 0}],
     ])
 );
 
 const clock = new THREE.Clock();
+
+const makePositionMap = (model, skeleton) => {
+    const matrixWorldInv = new THREE.Matrix4();
+    const boneMatrix = new THREE.Matrix4();
+    matrixWorldInv.copy(model.matrixWorld).invert();
+    const map = new Map(
+        skeleton.bones.flatMap((bone, i) => {
+            const vec = new THREE.Vector3();
+            boneMatrix.multiplyMatrices(matrixWorldInv, bone.matrixWorld);
+            vec.setFromMatrixPosition(boneMatrix);
+            //vec.copy(bone.position);
+            //bone.parent.localToWorld(vec);
+            //bone.getWorldPosition(vec);
+            //pmodel.worldToLocal(vec);
+            let key = bone.name.toLowerCase();
+            key = key.replace(/^mixamorig\d+/, '');
+            const entries = [];
+            if (key === 'spine2') {
+                entries.push(['chest', vec]);
+            } else if (key === 'spine1') {
+                entries.push(['midtorso', vec]);
+            } else if (key === 'spine') {
+                entries.push(['stomach', vec]);
+            }
+            if (key.startsWith('left')) {
+                entries.push([key.slice(4), vec]);
+            } else if (!key.startsWith('right')) {
+                entries.push([key, vec]);
+            }
+            if (key === 'hips') {
+                entries.push(['hip', vec]);
+            }
+            /*
+            if (key === 'lefteye') {
+                entries.push(['head', vec]); // REVIEW
+            }
+            */
+            return entries;
+        })
+    );
+    const maxY = Math.max(...[...map.values()].map(({name, y}) => name ? y : -Infinity));
+    map.set('abovehead', new THREE.Vector3(0, maxY + 10, 0));
+    return map;
+};
+
 
 class BoneTarget {
       constructor(model, bone, links, effector) {
@@ -145,36 +202,6 @@ class BoneTarget {
           this.bone = bone;
           this.links = links;
           this.effector = effector;
-
-          this.positionMap = new Map(
-              model.skeleton.bones.flatMap(bone => {
-                  const vec = new THREE.Vector3();
-                  for (let p = bone; p && p !== this.model; p = p.parent) {
-                      vec.add(p.position);
-                  }
-                  let key = bone.name.toLowerCase();
-                  if (key.startsWith('mixamorig')) {
-                      key = key.slice(9);
-                  }
-                  const entries = [];
-                  if (key === 'spine2') {
-                      entries.push(['chest', vec]);
-                  } else if (key === 'spine1') {
-                      entries.push(['midtorso', vec]);
-                  } else if (key === 'spine') {
-                      entries.push(['stomach', vec]);
-                  }
-                  if (key.startsWith('left')) {
-                      entries.push([key.slice(4), vec]);
-                  }
-                  if (key === 'hips') {
-                      entries.push(['hip', vec]);
-                  }
-                  return entries;
-              })
-          );
-          const maxY = Math.max(...[...this.positionMap.values()].map(({y}) => y));
-          this.positionMap.set('abovehead', new THREE.Vector3(0, maxY + 10, 0));
 
           this._vec = new THREE.Vector3();
           this._vec2 = new THREE.Vector3();
@@ -185,50 +212,28 @@ class BoneTarget {
               bone.rotation.set(0, 0, 0);
           }
       }
+      
+      distanceToEffector({threshold = 1} = {}) {
+          this._vec.copy(this.bone.position);
+          this.bone.parent.localToWorld(this._vec);
+          this._vec2.copy(this.effector.position);
+          this.effector.parent.localToWorld(this._vec2);
+          return this._vec.distanceTo(this._vec2);
+      }
 
       setModelRelative(x, y, z) {
           if (y === undefined) {
               this._vec.copy(x); // x is Vector3
           } else {
-              if (typeof y === 'string') {
-                  for (const [k, v] of this.positionMap) {
-                      if (k.endsWith(y)) {
-                          y = v.y;
-                          break;
-                      }
-                  }
-              }
               this._vec.set(x, y, z);
           }
           this.model.localToWorld(this._vec);
           this.bone.parent.worldToLocal(this._vec);
-          /*
-          for (let p = this.bone.parent; p && p !== this.model; p = p.parent) {
-              this._vec.sub(p.position);
-          }
-          */
           this.bone.position.copy(this._vec);
       }
 
       setNormal(x, y, z) {
-          //this._mat.makeTranslation(0, -1, 0);
-          /*
-          for (let p = this.effector; p && p !== this.model; p = p.parent) {
-              this._mat.premultiply(p.matrix);
-          }
-          console.log(this._mat);
-          */
-          //this._mat.premultiply(this.effector.matrixWorld);
-          /*
-          this._vec.set(0, -100, 0);
-          this.effector.localToWorld(this._vec);
-          this.model.worldToLocal(this._vec);
-          this._vec2.set(0, 0, 0);
-          this.effector.localToWorld(this._vec2);
-          this.model.worldToLocal(this._vec2);
-          this._vec.sub(this._vec2).normalize();
-          */
-          // TODO avoid resetting this at the beginning
+          // TODO avoid resetting this at the beginning?
 
           this.effector.rotation.x = 0;
           this.effector.rotation.z = 0;
@@ -286,7 +291,7 @@ const createPanel = () => {
     }
 };
 
-const wireUpForIk = (model, specs, rotationConstraints) => {
+const wireUpForIk = (group, model, yzx, specs, rotationConstraints) => {
     const { bones } = model.skeleton;
 
     const ikPairs = Object.entries(specs).map(([name, spec]) => {
@@ -299,7 +304,7 @@ const wireUpForIk = (model, specs, rotationConstraints) => {
         while (link && !link.name?.endsWith(spec.base)) {
             linkBones.push(link);
             //targetPos.add(link.position);
-            link.rotation.order = 'YZX'; // rotation constraints depend on this
+            link.rotation.order = yzx; // rotation constraints depend on this
             link = link.parent;
         }
         if (!link?.name?.endsWith(spec.base)) {
@@ -326,7 +331,15 @@ const wireUpForIk = (model, specs, rotationConstraints) => {
 
                 let ikConstraints;
                 if (constraints) {
-                    const [[xMin, xMax], [yMin, yMax], [zMin, zMax]] = constraints;
+                    const [xMin, xMax] = constraints[[1, 2, 0][yzx.indexOf('X')]];
+                    const [yMin, yMax] = constraints[[1, 2, 0][yzx.indexOf('Y')]];
+                    const [zMin, zMax] = constraints[[1, 2, 0][yzx.indexOf('Z')]];
+
+                    console.log({
+                        xMin, xMax,
+                        yMin, yMax,
+                        zMin, zMax,
+                    });
                     ikConstraints = {
                         rotationMin: new THREE.Vector3(xMin * Math.PI, yMin * Math.PI, zMin * Math.PI),
                         rotationMax: new THREE.Vector3(xMax * Math.PI, yMax * Math.PI, zMax * Math.PI),
@@ -353,11 +366,12 @@ const wireUpForIk = (model, specs, rotationConstraints) => {
     });
     
     const newBones = [...bones, ...ikPairs.map(([, { targetBone }]) => targetBone)];
-    model.bind(new THREE.Skeleton(newBones));
+    const newBoneInverses = [...model.skeleton.boneInverses, ...ikPairs.map(() => new THREE.Matrix4())];
+    model.bind(new THREE.Skeleton(newBones, newBoneInverses), model.bindMatrix);
 
     const targetBones = Object.fromEntries(
         ikPairs.map(([name, { targetBone, linkBones, effectorBone }]) =>
-            [name, new BoneTarget(model, targetBone, linkBones, effectorBone)]
+            [name, new BoneTarget(group, targetBone, linkBones, effectorBone)]
         )
     );
 
@@ -422,7 +436,7 @@ function animateLegs(targetBones, elapsedTime) {
 
 // Load humanoid model
 const loader = new GLTFLoader();
-loader.load('models/gltf/Xbot.glb', function (gltf) {
+loader.load('models/gltf/jennifer.glb', function (gltf) {
     const group = gltf.scene;
     scene.add(group);
 
@@ -431,6 +445,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
 
     let model;
     group.traverse(node => {
+        // TODO more checks to pick right one if multiple skinned meshes in object
         if (!model && node.isSkinnedMesh) {
             model = node;
         }
@@ -452,7 +467,24 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     model.bind(new THREE.Skeleton([...model.skeleton.bones, ...handPerps]));
     */
 
-    const [targetBones, iks] = wireUpForIk(model, {
+
+    // jennifer:
+    //  X: up/down
+    //  Y: twist
+    //  Z: front/back
+    // ZXY
+
+    
+    
+
+    // xbot:
+    //  X: twist
+    //  Y: front/back
+    //  Z: up/down
+    // YZX
+
+    const modelYZX = 'YZX'; // TODO derive from model (or normalize model)
+    const [targetBones, iks] = wireUpForIk(group, model, modelYZX, {
         leftHand: {base: 'Shoulder', effector: 'LeftHand'},
         //leftHandPerp: {base: 'Shoulder', effector: 'LeftHandPerp'},
 
@@ -503,7 +535,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     });
 
     const skeleton = new SkeletonHelper(group);
-    //scene.add(skeleton);
+    scene.add(skeleton);
 
     /*
     targetBones.leftHand.effector.rotateX(Math.PI);
@@ -517,7 +549,6 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     model.skeleton.bones.find(({name}) => name.includes('LeftForeArm')).rotateX(-0.4 * Math.PI);
     model.skeleton.bones.find(({name}) => name.includes('RightArm')).rotateZ(0.44 * Math.PI);
     model.skeleton.bones.find(({name}) => name.includes('RightForeArm')).rotateX(-0.4 * Math.PI);
-    */
 
     function updateTargetBones(elapsedTime) {
         //animateHead(targetBones, elapsedTime);
@@ -526,6 +557,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
         //animateLegs(targetBones, elapsedTime);
         ccdikSolver.update();
     }
+    */
     
     function updateBonesFromSettings() {
         for (const key in settings) {
@@ -534,9 +566,26 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
                 console.warn(`No bone for settings key: ${key}!`);
                 continue;
             }
+
+            /*
             const rot = bone.rotation;
             const {x = rot.x / Math.PI, y = rot.y / Math.PI, z = rot.z / Math.PI} = settings[key];
             bone.rotation.set(x * Math.PI, y * Math.PI, z * Math.PI, 'YZX');
+            */
+
+            const {x, y, z} = settings[key];
+            if (x || y || z) {
+                if (!bone.__initial) {
+                    scene.attach(bone);
+                    bone.__initial = [...bone.rotation];
+                }
+                //const par = bone.parent;
+                const eu = new THREE.Euler(x * Math.PI, y * Math.PI, z * Math.PI, 'YZX');
+                const quat = new THREE.Quaternion().setFromEuler(eu);
+                bone.rotation.set(...bone.__initial);
+                bone.quaternion.premultiply(quat);
+                //par.attach(bone);
+            }
         }
     }
 
@@ -545,32 +594,44 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
     let currentValues = targetValues;
     let startValues = targetValues;
 
-    const boneKeywords = [...targetBones.leftHand.positionMap.keys()]
-    boneKeywords.sort((a, b) => b.length - a.length);
-    console.log(boneKeywords);
+    let positionMap, boneKeywords;
+
     const xzVec = new THREE.Vector2();
 
     function updateBonesFromText(elapsedTime) {
         if (elapsedTime < .33) {
-          targetBones.rightHand.setModelRelative(-40, 50, 0);
-          targetBones.leftHand.setModelRelative(40, 50, 0);
+          targetBones.rightHand.setModelRelative(0, 0, 0);
+          targetBones.leftHand.setModelRelative(0, 0, 0);
           ccdikSolver.update();
           return;
         }
 
+        if (!positionMap) {
+            positionMap = makePositionMap(group, model.skeleton);
+            boneKeywords = [...positionMap.keys()];
+
+            // DEBUG
+            console.log(boneKeywords);
+            const partYs = [...positionMap].map(([k, v]) => [k, v.y]).sort(([, a], [, b]) => b - a);
+            for (const [k, v] of partYs) {
+                console.log(k, v);
+            }
+            console.log(model);
+        }
+
         const match = textarea.value.match(
-          /^\s*left-hand\s*\{\s*transition:[^;]+;\s*position:\s*([a-z]+(?:\s+[a-z]+)*)\s*;\s*direction:\s*((?:up|left|slightly|right|down|out|in)(?:\s+(?:up|left|right|down|out|slightly|in))*)/);
+          /^\s*left-hand(?:\s*,.*?)?\s*\{\s*transition:[^;]+;\s*position:\s*([a-z_-]+(?:\s+[a-z_-]+)*)\s*;\s*direction:\s*((?:up|left|slightly|right|down|out|in|none)(?:\s+(?:up|left|right|down|out|slightly|in|none))*)/);
 
         if (match) {
             let [, poss, dirs] = match;
             poss = ` ${poss} `;
-            const yKwd = boneKeywords.find(kw => poss.includes(kw));
+            const yKwd = boneKeywords.find(kw => poss.includes(` ${kw} `));
             if (yKwd) {
-              const radialDist = poss.includes('slightly extended')
+              const radialDist = (poss.includes('slightly extended')
                 ? 40
                 : poss.includes('extended')
                 ? 80
-                : 25;
+                : 25) / 100;
               const xDir = 
                 poss.includes(' slightly left ') ? 0.5 : poss.includes(' slightly right ') ? -0.5 :
                 poss.includes(' left ') ? 1 : poss.includes(' right ') ? -1 : 0;
@@ -581,7 +642,7 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
               
               const newTargetValues = [
                 xzVec.x,
-                targetBones.leftHand.positionMap.get(yKwd).y,
+                positionMap.get(yKwd).y,
                 xzVec.y,
 
                 dirs.includes('slightly left') ? 0.5 : dirs.includes('slightly right') ? -0.5 : dirs.includes('left') ? 1 : dirs.includes('right') ? -1 : 0,
@@ -591,6 +652,11 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
               const transitionDuration = 0.3;
               const transitionTimingFunction = p => p;
               if (newTargetValues.some((v, i) => v !== targetValues[i])) {
+                  //const dbvec = new THREE.Vector3(...newTargetValues.slice(0, 3));
+                  //targetBones.leftHand.getParentModel().localToWorld(dbvec);
+                  //console.log(newTargetValues.slice(0, 3));
+                  //console.log(dbvec.x, dbvec.y, dbvec.z);
+                  //console.log(targetBones.leftHand.getParentModel());
                   targetValues = newTargetValues;
                   startValues = currentValues;
                   startTime = elapsedTime;
@@ -601,30 +667,30 @@ loader.load('models/gltf/Xbot.glb', function (gltf) {
               currentValues = targetValues.map((tgt, i) => startValues[i] * (1 - p) + tgt * p);
               targetBones.leftHand.setModelRelative(...currentValues.slice(0, 3));
               ccdikSolver.update();
+              if (targetBones.leftHand.distanceToEffector() > 1) {
+                  targetBones.leftHand.reset();
+                  targetBones.leftHand.setModelRelative(...currentValues.slice(0, 3));
+                  ccdikSolver.update();
+              }
               targetBones.leftHand.setNormal(...currentValues.slice(3));
             }
         }
     }
 
-    //createPanel();
+    createPanel();
 
     // Animation loop
-    async function animate() {
+    const animate = () => {
         requestAnimationFrame(animate);
         const elapsedTime = clock.getElapsedTime();
 
-        
-        updateBonesFromText(elapsedTime);
-
-
-        //updateTargetBones(elapsedTime);
-        //if (elapsedTime < .3) updateTargetBones(elapsedTime);
-        // updateBonesFromSettings();
+        //updateBonesFromText(elapsedTime);
+        updateBonesFromSettings();
 
         controls.update();
         renderer.render(scene, camera);
         
-    }
+    };
 
     animate();
 }, undefined, function (error) {

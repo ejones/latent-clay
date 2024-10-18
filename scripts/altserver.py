@@ -32,6 +32,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 *messages,
             ],
             stream=True,
+            extra_body={'cache_prompt': True},
         )
 
         ass_content = ''

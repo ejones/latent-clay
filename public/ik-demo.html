@@ -9,12 +9,13 @@
         canvas { display: block; }
         .ai-msg {
             position: absolute;
-            bottom: 40px;
+            bottom: 50px;
             left: 0;
             right: 50%;
             background: rgba(0 0 0 / 0.4);
             color: white;
             font-family: monospace;
+            font-size: 16px;
             padding: 20px;
             white-space: pre-wrap;
         }
@@ -35,7 +36,9 @@
         }
       }
     </script>
-    <script type="module" src="js/ik-demo.js"></script>
     <div class="ai-msg"></div>
+    <script type="module">
+        import("./js/ik-demo.js?" + Date.now());
+    </script>
 </body>
 </html>
